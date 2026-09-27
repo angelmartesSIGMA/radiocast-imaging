@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { TRACK_TYPES } from "@/lib/studio/constants";
 import { fmt, fmtDb, fmtSec, fmtShort } from "@/lib/studio/format";
 import { useStudio } from "@/lib/studio/store";
@@ -78,14 +79,31 @@ function ClipPanel() {
           </div>
         </div>
         <div className={css.stats}>
-          <div className={css.stat}>
-            <p>Start</p>
-            <p className="mono">{fmt(sel.start)}</p>
-          </div>
-          <div className={css.stat}>
-            <p>Length</p>
-            <p className="mono">{fmtSec(sel.len)}</p>
-          </div>
+          <NumberField
+            label="Start"
+            value={sel.start}
+            display={fmt(sel.start)}
+            step={s.scale()[1]}
+            onCommit={(v) => {
+              s.commit();
+              s.updateClip(sel.id, { start: Math.max(0, v) });
+            }}
+          />
+          <NumberField
+            label="Length"
+            value={sel.len}
+            display={fmtSec(sel.len)}
+            step={0.1}
+            onCommit={(v) => {
+              const len = Math.max(0.1, Math.min(v, snd.dur - sel.offset));
+              s.commit();
+              s.updateClip(sel.id, {
+                len,
+                fadeIn: Math.min(sel.fadeIn, len),
+                fadeOut: Math.min(sel.fadeOut, Math.max(0, len - Math.min(sel.fadeIn, len))),
+              });
+            }}
+          />
         </div>
         <Slider
           label="Gain"
@@ -206,6 +224,21 @@ function SessionPanel() {
         />
       </section>
 
+      <section className={`${css.section} ${css.stack}`}>
+        <p className={css.group}>Recording</p>
+        <ToggleRow
+          title="Count-in"
+          sub="3-2-1 beeps before the take starts"
+          checked={s.countInOn}
+          onToggle={() => s.set({ countInOn: !s.countInOn })}
+        />
+        <button type="button" className={css.recBtn} onClick={() => void s.toggleRecord()}>
+          <span className={css.recDot} />
+          {s.recording ? "Stop recording" : "Record a voice take"}
+          <Kbd>R</Kbd>
+        </button>
+      </section>
+
       <section className={css.section} style={{ borderBottom: 0 }}>
         <p className={css.group}>Tips</p>
         <ul className={css.tips}>
@@ -214,7 +247,10 @@ function SessionPanel() {
           </li>
           <li>Right-click a clip for quick actions. Double-click a track name to rename it.</li>
           <li>
-            Press <Kbd>?</Kbd> for every shortcut.
+            Double-click an empty spot on a track to search for a sound to put there.
+          </li>
+          <li>
+            Press <Kbd>⌘K</Kbd> to search everything, or <Kbd>?</Kbd> for shortcuts.
           </li>
         </ul>
       </section>
@@ -234,6 +270,81 @@ function LengthBar({ end, target }: { end: number; target: number }) {
       <div className={css.lengthLegend}>
         <span>{fmtSec(end)}</span>
         <span>target :{String(target).padStart(2, "0")}</span>
+      </div>
+    </div>
+  );
+}
+
+/** Click-to-edit number with − / + nudge buttons. Accepts seconds (“2.5”) or m:ss.d (“0:02.5”). */
+function NumberField({
+  label,
+  value,
+  display,
+  step,
+  onCommit,
+}: {
+  label: string;
+  value: number;
+  display: string;
+  step: number;
+  onCommit: (v: number) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [text, setText] = useState("");
+  useEffect(() => {
+    if (!editing) setText(value.toFixed(2));
+  }, [value, editing]);
+
+  const parse = (t: string) => {
+    const m = t.trim().match(/^(?:(\d+):)?(\d+(?:\.\d+)?)s?$/);
+    if (!m) return null;
+    return (m[1] ? +m[1] * 60 : 0) + +m[2];
+  };
+  const commit = () => {
+    const v = parse(text);
+    setEditing(false);
+    if (v != null && Math.abs(v - value) > 0.0005) onCommit(v);
+  };
+
+  return (
+    <div className={css.stat}>
+      <p>{label}</p>
+      <div className={css.numRow}>
+        {editing ? (
+          <input
+            className={`mono ${css.numInput}`}
+            value={text}
+            autoFocus
+            onFocus={(e) => e.currentTarget.select()}
+            onChange={(e) => setText(e.target.value)}
+            onBlur={commit}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") commit();
+              if (e.key === "Escape") {
+                e.stopPropagation();
+                setEditing(false);
+              }
+            }}
+            aria-label={`${label} in seconds`}
+          />
+        ) : (
+          <button
+            type="button"
+            className={`mono ${css.numValue}`}
+            onClick={() => setEditing(true)}
+            data-tip={`Click to type a ${label.toLowerCase()}`}
+          >
+            {display}
+          </button>
+        )}
+        <span className={css.nudge}>
+          <button type="button" aria-label={`Decrease ${label}`} onClick={() => onCommit(+(value - step).toFixed(3))}>
+            −
+          </button>
+          <button type="button" aria-label={`Increase ${label}`} onClick={() => onCommit(+(value + step).toFixed(3))}>
+            +
+          </button>
+        </span>
       </div>
     </div>
   );

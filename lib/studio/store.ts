@@ -5,6 +5,8 @@ import { persist } from "zustand/middleware";
 import { encodeWav, bufferPeak, wavePath } from "@/lib/audio/dsp";
 import { getEngine } from "@/lib/audio/engine";
 import { clock, dom } from "./clock";
+import { audioStore } from "./idb";
+import { defaultLanes, LANE_IDS, TEMPLATES } from "./templates";
 import { COLORS, HEADER_W, SCALES, TRACK_TYPES, VOICES } from "./constants";
 import { clamp, dbToGain, fmt } from "./format";
 import type { Clip, Lane, LibraryFilter, MixSnapshot, Sound, TrackType } from "./types";
@@ -29,6 +31,19 @@ export interface ContextMenu {
   y: number;
 }
 
+export interface Toast {
+  msg: string;
+  color: string;
+  id: number;
+  action?: { label: string; run: () => void };
+}
+
+/** Context for the command palette; `lane`/`at` set when opened by double-clicking a track. */
+export interface PaletteCtx {
+  lane?: string;
+  at?: number;
+}
+
 export interface StudioState {
   // document
   sounds: Sound[];
@@ -42,6 +57,8 @@ export interface StudioState {
   target: number | null;
   past: Snapshot[];
   future: Snapshot[];
+  /** True once a session exists in storage (so reloads restore it instead of the demo). */
+  hasSession: boolean;
 
   // transport
   ready: boolean;
@@ -52,6 +69,8 @@ export interface StudioState {
   loop: boolean;
   previewId: string | null;
   exporting: boolean;
+  countIn: number | null;
+  countInOn: boolean;
 
   // view
   pps: number;
@@ -77,9 +96,12 @@ export interface StudioState {
   renaming: string | null;
 
   // overlays
-  toast: { msg: string; color: string; id: number } | null;
+  toast: Toast | null;
   drawer: boolean;
   shortcuts: boolean;
+  palette: PaletteCtx | null;
+  tour: number | null;
+  tourDone: boolean;
 
   // brief
   sent: boolean;
@@ -92,9 +114,10 @@ export interface StudioState {
 }
 
 interface Actions {
-  init(demo?: boolean): void;
+  init(): Promise<void>;
   set: (patch: Partial<StudioState>) => void;
-  toastMsg(msg: string, color?: string): void;
+  toastMsg(msg: string, color?: string, action?: Toast["action"]): void;
+  newSession(templateId: string): void;
 
   commit(): void;
   undo(): void;
@@ -139,7 +162,20 @@ let nid = 1;
 const uid = (p: string) => `${p}${nid++}`;
 let toastTimer: ReturnType<typeof setTimeout> | undefined;
 let recorder: MediaRecorder | null = null;
+let countStream: MediaStream | null = null;
 let takes = 0;
+let initing = false;
+
+/** Keep generated ids ahead of any restored ones. */
+function bumpIds(ids: string[]) {
+  for (const id of ids) {
+    const n = parseInt(id.replace(/^\D+/, ""), 10);
+    if (Number.isFinite(n) && n >= nid) nid = n + 1;
+  }
+  takes = Math.max(takes, ids.filter((i) => i.startsWith("u")).length);
+}
+
+const undoAction = () => ({ label: "Undo", run: () => useStudio.getState().undo() });
 
 const initialW = typeof window === "undefined" ? 1440 : window.innerWidth;
 
@@ -148,12 +184,7 @@ export const useStudio = create<Studio>()(
     (set, get) => ({
       sounds: [],
       clips: [],
-      lanes: [
-        { id: "L1", type: "voice", label: "Voice", gain: 0, mute: false, solo: false },
-        { id: "L2", type: "bed", label: "Music bed", gain: 0, mute: false, solo: false },
-        { id: "L3", type: "fx", label: "FX", gain: 0, mute: false, solo: false },
-        { id: "L4", type: "fx", label: "FX 2", gain: 0, mute: false, solo: false },
-      ],
+      lanes: defaultLanes(),
       projectName: "Station ID — Summer",
       master: 0,
       duck: true,
@@ -162,6 +193,7 @@ export const useStudio = create<Studio>()(
       target: 20,
       past: [],
       future: [],
+      hasSession: false,
 
       ready: false,
       playing: false,
@@ -171,6 +203,8 @@ export const useStudio = create<Studio>()(
       loop: false,
       previewId: null,
       exporting: false,
+      countIn: null,
+      countInOn: true,
 
       pps: 40,
       viewW: 900,
@@ -196,6 +230,9 @@ export const useStudio = create<Studio>()(
       toast: null,
       drawer: false,
       shortcuts: false,
+      palette: null,
+      tour: null,
+      tourDone: false,
 
       sent: false,
       station: "",
@@ -208,32 +245,51 @@ export const useStudio = create<Studio>()(
       // ───────────────────────────── basics
       set: (patch) => set(patch),
 
-      init(demo = true) {
-        if (get().ready) return;
+      async init() {
+        if (initing) return;
+        initing = true;
         const engine = getEngine();
         const sounds = engine.buildLibrary();
-        const mk = (soundId: string, lane: string, start: number, gain = 0, fadeIn = 0, fadeOut = 0): Clip => {
-          const s = sounds.find((x) => x.id === soundId)!;
-          return { id: uid("c"), soundId, lane, start, offset: 0, len: s.dur, gain, fadeIn, fadeOut };
-        };
-        const clips = demo
-          ? [
-              mk("pulse", "L2", 2.4, -6, 0.3, 1.5),
-              mk("riser", "L3", 0, -3),
-              mk("impact", "L3", 2.4),
-              mk("subdrop", "L4", 2.4, -4),
-              mk("zap", "L4", 9.6, -6),
-              mk("whoosh", "L3", 16.4, -4),
-              mk("chime", "L4", 17.2, -2, 0, 0.3),
-            ]
-          : [];
-        set({ sounds, clips, ready: true });
+        const st = get();
+        bumpIds([...st.clips.map((c) => c.id), ...st.lanes.map((l) => l.id)]);
+        if (!st.hasSession) {
+          const t = TEMPLATES[0];
+          set({ sounds, ready: true, hasSession: true, clips: buildClips(t.id), lanes: defaultLanes(), target: t.target, projectName: t.title });
+        } else set({ sounds, ready: true });
+
+        // Restore uploads and takes from IndexedDB.
+        const rows = await audioStore.all();
+        const restored: Sound[] = [];
+        for (const r of rows) {
+          try {
+            const buf = await engine.decode(await r.blob.arrayBuffer());
+            engine.buffers.set(r.id, buf);
+            restored.push({ id: r.id, name: r.name, kind: r.kind, type: r.type, dur: buf.duration, path: wavePath(buf.getChannelData(0)), user: true });
+          } catch {
+            void audioStore.remove(r.id);
+          }
+        }
+        bumpIds(restored.map((x) => x.id));
+        const known = new Set([...sounds, ...restored].map((x) => x.id));
+        set((cur) => ({ sounds: [...cur.sounds, ...restored], clips: cur.clips.filter((c) => known.has(c.soundId)) }));
       },
 
-      toastMsg(msg, color = COLORS.violet) {
+      newSession(templateId) {
+        const t = TEMPLATES.find((x) => x.id === templateId);
+        if (!t) return;
+        const s = get();
+        if (s.playing) s.stop();
+        s.commit();
+        clock.set(0);
+        set({ clips: buildClips(t.id), lanes: defaultLanes(), target: t.target, projectName: t.title, selected: null, palette: null });
+        get().toastMsg(`Started “${t.name}”`, COLORS.violet, undoAction());
+        requestAnimationFrame(() => get().zoomFit());
+      },
+
+      toastMsg(msg, color = COLORS.violet, action) {
         clearTimeout(toastTimer);
-        set({ toast: { msg, color, id: Date.now() } });
-        toastTimer = setTimeout(() => set({ toast: null }), 2800);
+        set({ toast: { msg, color, id: Date.now(), action } });
+        toastTimer = setTimeout(() => set({ toast: null }), action ? 5000 : 2800);
       },
 
       // ───────────────────────────── history
@@ -394,7 +450,11 @@ export const useStudio = create<Studio>()(
         get().restartIfPlaying();
       },
       removeClip(id) {
-        get().commit();
+        const s = get();
+        const c = s.clips.find((x) => x.id === id);
+        const name = c && s.sounds.find((x) => x.id === c.soundId)?.name;
+        s.commit();
+        if (name) s.toastMsg(`Deleted “${name}”`, COLORS.red, undoAction());
         set((st) => ({ clips: st.clips.filter((c) => c.id !== id), selected: st.selected === id ? null : st.selected, menu: null }));
         get().restartIfPlaying();
       },
@@ -437,7 +497,7 @@ export const useStudio = create<Studio>()(
         }
         set({ clips: next, menu: null });
         get().restartIfPlaying();
-        s.toastMsg(`Split ${targets.length} clip${targets.length > 1 ? "s" : ""} at ${fmt(t)}`);
+        s.toastMsg(`Split ${targets.length} clip${targets.length > 1 ? "s" : ""} at ${fmt(t)}`, COLORS.violet, undoAction());
       },
 
       addLane(type) {
@@ -459,7 +519,10 @@ export const useStudio = create<Studio>()(
         if (restart) get().restartIfPlaying();
       },
       removeLane(id) {
-        get().commit();
+        const s = get();
+        const l = s.lanes.find((x) => x.id === id);
+        s.commit();
+        if (l) s.toastMsg(`Removed “${l.label}”`, COLORS.red, undoAction());
         set((st) => ({ lanes: st.lanes.filter((l) => l.id !== id), clips: st.clips.filter((c) => c.lane !== id) }));
         get().restartIfPlaying();
       },
@@ -512,7 +575,7 @@ export const useStudio = create<Studio>()(
             const type: TrackType = laneObj ? laneObj.type : buf.duration > 10 ? "bed" : "voice";
             const lane =
               target === "library" ? null : laneObj ? laneObj.id : get().lanes.find((l) => l.type === type)?.id ?? null;
-            addUserSound(buf, f.name.replace(/\.[^.]+$/, ""), "Upload", type, lane, at);
+            addUserSound(buf, f, f.name.replace(/\.[^.]+$/, ""), "Upload", type, lane, at);
             at += buf.duration;
           } catch {
             get().toastMsg(`Couldn’t read ${f.name}`, COLORS.red);
@@ -524,6 +587,13 @@ export const useStudio = create<Studio>()(
         const s = get();
         if (s.recording) {
           recorder?.stop();
+          return;
+        }
+        if (s.countIn != null) {
+          // Cancel during count-in.
+          countStream?.getTracks().forEach((t) => t.stop());
+          countStream = null;
+          set({ countIn: null });
           return;
         }
         if (typeof MediaRecorder === "undefined" || !navigator.mediaDevices) {
@@ -539,6 +609,19 @@ export const useStudio = create<Studio>()(
         }
         try {
           const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          if (get().playing) get().stop();
+          if (get().countInOn) {
+            countStream = stream;
+            for (let n = 3; n >= 1; n--) {
+              if (countStream !== stream) return; // cancelled
+              set({ countIn: n });
+              getEngine().beep(n === 1 ? 1320 : 880);
+              await new Promise((r) => setTimeout(r, 800));
+            }
+            if (countStream !== stream) return;
+            countStream = null;
+            set({ countIn: null });
+          }
           const chunks: Blob[] = [];
           const rec = new MediaRecorder(stream);
           recorder = rec;
@@ -553,9 +636,10 @@ export const useStudio = create<Studio>()(
             set({ recording: false, playing: false, recLane: null });
             recorder = null;
             try {
-              const buf = await getEngine().decode(await new Blob(chunks).arrayBuffer());
+              const blob = new Blob(chunks, { type: rec.mimeType });
+              const buf = await getEngine().decode(await blob.arrayBuffer());
               takes += 1;
-              addUserSound(buf, `Take ${takes}`, "Mic", "voice", lane, recAt);
+              addUserSound(buf, blob, `Take ${takes}`, "Mic", "voice", lane, recAt);
             } catch {
               get().toastMsg("That take couldn’t be saved", COLORS.red);
             }
@@ -564,6 +648,7 @@ export const useStudio = create<Studio>()(
           set({ recording: true, recAt, recLane: lane });
           get().play(true);
         } catch {
+          set({ countIn: null });
           get().toastMsg("Microphone access was blocked", COLORS.red);
         }
       },
@@ -609,9 +694,16 @@ export const useStudio = create<Studio>()(
     }),
     {
       name: "radiocast-imaging",
-      version: 1,
-      // Only persist lightweight preferences; audio buffers can’t be serialised.
+      version: 2,
+      // v1 only stored preferences; they carry over as-is.
+      migrate: (persisted) => persisted as never,
+      // Audio lives in IndexedDB (see idb.ts); everything else is small enough for localStorage.
       partialize: (s) => ({
+        hasSession: s.hasSession,
+        clips: s.clips,
+        lanes: s.lanes,
+        countInOn: s.countInOn,
+        tourDone: s.tourDone,
         projectName: s.projectName,
         master: s.master,
         duck: s.duck,
@@ -629,9 +721,33 @@ export const useStudio = create<Studio>()(
   ),
 );
 
-function addUserSound(buf: AudioBuffer, name: string, kind: string, type: TrackType, lane: string | null, at: number) {
+function buildClips(templateId: string): Clip[] {
+  const t = TEMPLATES.find((x) => x.id === templateId);
+  const engine = getEngine();
+  if (!t) return [];
+  return t.clips.flatMap((tc) => {
+    const buf = engine.buffers.get(tc.sound);
+    if (!buf) return [];
+    return [
+      {
+        id: uid("c"),
+        soundId: tc.sound,
+        lane: LANE_IDS[tc.lane],
+        start: tc.start,
+        offset: 0,
+        len: Math.min(tc.len ?? buf.duration, buf.duration),
+        gain: tc.gain ?? 0,
+        fadeIn: tc.fadeIn ?? 0,
+        fadeOut: tc.fadeOut ?? 0,
+      },
+    ];
+  });
+}
+
+function addUserSound(buf: AudioBuffer, blob: Blob, name: string, kind: string, type: TrackType, lane: string | null, at: number) {
   const id = uid("u");
   getEngine().buffers.set(id, buf);
+  void audioStore.put({ id, name, kind, type, blob });
   const s: Sound = { id, name, kind, type, dur: buf.duration, path: wavePath(buf.getChannelData(0)), user: true };
   useStudio.setState((st) => ({ sounds: [...st.sounds, s] }));
   const st = useStudio.getState();

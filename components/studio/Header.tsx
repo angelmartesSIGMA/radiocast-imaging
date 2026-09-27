@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
+import { TEMPLATES } from "@/lib/studio/templates";
 import { getEngine } from "@/lib/audio/engine";
 import { clock } from "@/lib/studio/clock";
 import { fmt, fmtShort } from "@/lib/studio/format";
@@ -32,37 +33,44 @@ export function Header() {
           className={css.projectName}
           value={s.projectName}
           onChange={(e) => s.set({ projectName: e.target.value })}
+          onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
           aria-label="Session name"
+          data-tip="Rename session"
           spellCheck={false}
         />
+        <NewMenu />
+        {s.vw >= 1360 && <SavedBadge />}
       </div>
 
-      <div className={css.transport}>
-        <IconButton icon="rewind" label="Back to start" title="Back to start (Home)" round onClick={() => s.seek(0)} />
+      <div className={css.transport} data-tour="transport">
+        <IconButton icon="rewind" label="Back to start" kbd="Home" round onClick={() => s.seek(0)} />
         <button
           type="button"
           className={css.play}
           onClick={s.togglePlay}
           aria-label={s.playing ? "Pause" : "Play"}
-          title="Play / pause (Space)"
+          data-tip={s.playing ? "Pause" : "Play"}
+          data-kbd="Space"
         >
           {s.playing ? <PauseGlyph /> : <PlayGlyph />}
         </button>
         <button
           type="button"
           className={css.rec}
-          data-on={s.recording || undefined}
+          data-on={s.recording || s.countIn != null || undefined}
           onClick={() => void s.toggleRecord()}
           aria-label={s.recording ? "Stop recording" : "Record"}
           aria-pressed={s.recording}
-          title="Record a voice take over the mix (R)"
+          data-tip={s.recording ? "Stop recording" : s.countIn != null ? "Cancel count-in" : "Record a voice take over the mix"}
+          data-kbd="R"
         >
           <span />
         </button>
         <IconButton
           icon="loop"
           label="Loop playback"
-          title={s.target ? `Loop to target length (L)` : "Loop session (L)"}
+          tip={s.target ? "Loop to the target length" : "Loop the session"}
+          kbd="L"
           round
           on={s.loop}
           onClick={() => s.set({ loop: !s.loop })}
@@ -89,14 +97,20 @@ export function Header() {
           className={css.ghostBtn}
           onClick={() => void s.exportWav()}
           disabled={s.exporting}
-          title="Export WAV"
+          data-tip="Download a 44.1 kHz stereo WAV of the mix"
           aria-label="Export WAV"
           style={{ padding: wide ? "0 16px" : 0 }}
         >
           <Icon name="download" size={15} />
           {wide && (s.exporting ? "Rendering…" : "Export WAV")}
         </button>
-        <button type="button" className={css.primaryBtn} onClick={() => s.set({ drawer: true, sent: false })}>
+        <button
+          type="button"
+          className={css.primaryBtn}
+          data-tour="send"
+          data-tip="Get a finished, voiced version from a Radiocast producer"
+          onClick={() => s.set({ drawer: true, sent: false })}
+        >
           <Icon name="send" size={14} />
           {s.vw >= 720 ? "Send to producers" : "Send"}
         </button>
@@ -168,7 +182,7 @@ function Meters() {
 
   return (
     <div className={css.meterWrap}>
-      <div className={css.meters} title="Output level">
+      <div className={css.meters} data-tip="Output level (L / R)">
         <span className={css.meterTrack}>
           <span ref={l} className={css.meterFill} />
         </span>
@@ -185,8 +199,97 @@ function Meters() {
           setClipped(false);
         }}
         aria-label={clipped ? "Output clipped — click to reset" : "No clipping"}
-        title={clipped ? "Output clipped — click to reset" : "Clip indicator"}
+        data-tip={clipped ? "Output clipped — click to reset" : "Clip indicator"}
       />
     </div>
+  );
+}
+
+function NewMenu() {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: PointerEvent) => {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    window.addEventListener("pointerdown", close);
+    window.addEventListener("keydown", esc);
+    ref.current?.querySelector<HTMLButtonElement>("[role=menuitem]")?.focus();
+    return () => {
+      window.removeEventListener("pointerdown", close);
+      window.removeEventListener("keydown", esc);
+    };
+  }, [open]);
+
+  return (
+    <div className={css.newWrap} ref={ref}>
+      <button
+        type="button"
+        className={css.newBtn}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen(!open)}
+        data-tip="Start a new session from a template"
+      >
+        New
+        <Icon name="chevronDown" size={13} />
+      </button>
+      {open && (
+        <div
+          className={css.newMenu}
+          role="menu"
+          onKeyDown={(e) => {
+            if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+            e.preventDefault();
+            const items = Array.from(ref.current?.querySelectorAll<HTMLButtonElement>("[role=menuitem]") ?? []);
+            const i = items.indexOf(document.activeElement as HTMLButtonElement);
+            items[(i + (e.key === "ArrowDown" ? 1 : -1) + items.length) % items.length]?.focus();
+          }}
+        >
+          <p className={css.newHead}>Start from a template</p>
+          {TEMPLATES.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setOpen(false);
+                useStudio.getState().newSession(t.id);
+              }}
+            >
+              <span className={css.newName}>{t.name}</span>
+              <span className={css.newBlurb}>{t.blurb}</span>
+            </button>
+          ))}
+          <p className={css.newFoot}>Your current session can be restored with Undo.</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Brief “Saving…” flash after edits, then a steady “Saved”. */
+function SavedBadge() {
+  const [saving, setSaving] = useState(false);
+  useEffect(() => {
+    let t: ReturnType<typeof setTimeout> | undefined;
+    const unsub = useStudio.subscribe((a, b) => {
+      if (a.clips === b.clips && a.lanes === b.lanes && a.projectName === b.projectName) return;
+      setSaving(true);
+      clearTimeout(t);
+      t = setTimeout(() => setSaving(false), 700);
+    });
+    return () => {
+      unsub();
+      clearTimeout(t);
+    };
+  }, []);
+  return (
+    <span className={css.saved} data-saving={saving || undefined} data-tip="Your session and uploads are saved in this browser">
+      <Icon name={saving ? "cloud" : "check"} size={12} />
+      {saving ? "Saving…" : "Saved"}
+    </span>
   );
 }

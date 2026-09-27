@@ -46,3 +46,34 @@
 .target select:focus-visible {
   border-color: var(--violet);
 }
+.cmd {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--bg-sunk);
+  padding: 0 8px 0 10px;
+  font-size: 12.5px;
+  color: var(--fg-3);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color 0.12s, color 0.12s;
+}
+.cmd:hover {
+  border-color: var(--line-2);
+  color: var(--fg-2);
+}
+.cmd span {
+  min-width: 96px;
+  text-align: left;
+}
+.cmd kbd {
+  border-radius: 5px;
+  border: 1px solid var(--line-2);
+  padding: 0 5px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--fg-2);
+}

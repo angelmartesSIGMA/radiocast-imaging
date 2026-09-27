@@ -21,6 +21,8 @@ export class AudioEngine {
   private playWhen = 0;
   private playFrom = 0;
   private pv: AudioBufferSourceNode | null = null;
+  private pvStart = 0;
+  private pvDur = 0;
   private peaks: [number, number] = [0, 0];
   buffers = new Map<string, AudioBuffer>();
   running = false;
@@ -201,6 +203,30 @@ export class AudioEngine {
       }
     };
     this.pv = src;
+    this.pvStart = this.ctx.currentTime;
+    this.pvDur = buf.duration;
+  }
+
+  /** 0–1 progress of the current library preview. */
+  previewProgress() {
+    if (!this.pv || !this.pvDur) return 0;
+    return Math.min(1, (this.ctx.currentTime - this.pvStart) / this.pvDur);
+  }
+
+  /** Short sine blip for the record count-in. */
+  beep(freq = 880, dur = 0.09) {
+    void this.ctx.resume();
+    const o = this.ctx.createOscillator();
+    const g = this.ctx.createGain();
+    const t = this.ctx.currentTime;
+    o.frequency.value = freq;
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.25, t + 0.005);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g);
+    g.connect(this.out);
+    o.start(t);
+    o.stop(t + dur + 0.02);
   }
 
   stopPreview() {

@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
+import { getEngine } from "@/lib/audio/engine";
 import { dom } from "@/lib/studio/clock";
 import { GROUPS, TRACK_TYPES } from "@/lib/studio/constants";
 import { fmtShort } from "@/lib/studio/format";
@@ -49,6 +50,7 @@ export function Library({ floating }: { floating: boolean }) {
     <aside
       className={`${css.lib} ${floating ? css.floating : ""}`}
       aria-label="Sound library"
+      data-tour="library"
       onDragOver={(e) => {
         if (!e.dataTransfer.types.includes("Files")) return;
         e.preventDefault();
@@ -163,7 +165,17 @@ function SoundRow({ s, previewing, dragging }: { s: Sound; previewing: boolean; 
   };
 
   return (
-    <div className={css.row} data-dragging={dragging || undefined} onPointerDown={onPointerDown} title="Drag onto a track">
+    <div
+      className={css.row}
+      data-dragging={dragging || undefined}
+      data-previewing={previewing || undefined}
+      onPointerDown={onPointerDown}
+      onDoubleClick={(e) => {
+        if (!(e.target as HTMLElement).closest("button")) useStudio.getState().addClip(s.id);
+      }}
+      data-tip="Drag onto a track · double-click to add at playhead"
+    >
+      {previewing && <PreviewBar color={T.color} />}
       <span className={css.thumb} style={{ background: T.soft }}>
         <svg viewBox="0 0 100 40" preserveAspectRatio="none">
           <path d={s.path} fill={T.color} />
@@ -180,7 +192,7 @@ function SoundRow({ s, previewing, dragging }: { s: Sound; previewing: boolean; 
         className={css.add}
         onClick={() => useStudio.getState().addClip(s.id)}
         aria-label={`Add ${s.name} at playhead`}
-        title="Add at playhead"
+        data-tip="Add at playhead"
       >
         <Icon name="plus" size={12} strokeWidth={2.4} />
       </button>
@@ -195,4 +207,18 @@ function SoundRow({ s, previewing, dragging }: { s: Sound; previewing: boolean; 
       </button>
     </div>
   );
+}
+
+function PreviewBar({ color }: { color: string }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    let raf = 0;
+    const paint = () => {
+      if (ref.current) ref.current.style.transform = `scaleX(${getEngine().previewProgress()})`;
+      raf = requestAnimationFrame(paint);
+    };
+    raf = requestAnimationFrame(paint);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+  return <span ref={ref} className={css.previewBar} style={{ background: color }} aria-hidden="true" />;
 }

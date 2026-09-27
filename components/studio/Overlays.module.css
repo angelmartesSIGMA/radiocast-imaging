@@ -205,3 +205,117 @@
     grid-template-columns: 1fr;
   }
 }
+
+.toastMsg {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.toastAction {
+  margin: -4px -8px -4px 4px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 4px 12px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--fg);
+  cursor: pointer;
+}
+.toastAction:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+.toastTimer {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 2px;
+  width: 100%;
+  background: rgba(255, 255, 255, 0.18);
+  transform-origin: left;
+  animation: shrink linear forwards;
+}
+@keyframes shrink {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+
+.modalFoot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 14px 22px 20px;
+  border-top: 1px solid var(--line);
+}
+.modalFoot button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line-2);
+  background: rgba(255, 255, 255, 0.03);
+  padding: 7px 14px;
+  font-size: 13px;
+  color: var(--fg);
+  cursor: pointer;
+}
+.modalFoot button:hover {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.countIn {
+  position: fixed;
+  inset: 0;
+  z-index: 75;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  background: radial-gradient(circle at center, rgba(255, 59, 92, 0.14), rgba(0, 0, 0, 0.55) 70%);
+  animation: fadeIn 0.15s ease-out;
+}
+.countCard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-width: 240px;
+  border-radius: 24px;
+  border: 1px solid rgba(255, 59, 92, 0.3);
+  background: rgba(17, 17, 20, 0.94);
+  padding: 24px 32px 22px;
+  box-shadow: var(--shadow-pop);
+}
+.countNum {
+  font-size: 120px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.04em;
+  color: var(--red);
+  text-shadow: 0 0 40px rgba(255, 59, 92, 0.5);
+  animation: countPop 0.8s ease-out;
+}
+.countLabel {
+  font-size: 15px;
+  font-weight: 600;
+}
+.countHint {
+  font-size: 12.5px;
+  color: var(--fg-2);
+}
+@keyframes countPop {
+  0% {
+    transform: scale(1.4);
+    opacity: 0;
+  }
+  25% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0.92);
+    opacity: 0.6;
+  }
+}

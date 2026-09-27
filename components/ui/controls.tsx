@@ -7,6 +7,8 @@ import s from "./ui.module.css";
 
 type BtnProps = ButtonHTMLAttributes<HTMLButtonElement>;
 
+type TipProps = { tip?: string; kbd?: string };
+
 export function IconButton({
   icon,
   label,
@@ -14,13 +16,17 @@ export function IconButton({
   round,
   size = 16,
   className,
+  tip,
+  kbd,
   ...rest
-}: BtnProps & { icon: IconName; label: string; on?: boolean; round?: boolean; size?: number }) {
+}: BtnProps & TipProps & { icon: IconName; label: string; on?: boolean; round?: boolean; size?: number }) {
   return (
     <button
       type="button"
       aria-label={label}
-      title={rest.title ?? label}
+      data-tip={tip ?? label}
+      data-kbd={kbd}
+      aria-keyshortcuts={kbd}
       data-on={on || undefined}
       aria-pressed={on === undefined ? undefined : on}
       className={`${s.iconBtn} ${round ? s.round : ""} ${className ?? ""}`}
@@ -36,11 +42,15 @@ export function TextButton({
   children,
   on,
   className,
+  tip,
+  kbd,
   ...rest
-}: BtnProps & { icon?: IconName; on?: boolean }) {
+}: BtnProps & TipProps & { icon?: IconName; on?: boolean }) {
   return (
     <button
       type="button"
+      data-tip={tip}
+      data-kbd={kbd}
       data-on={on || undefined}
       aria-pressed={on === undefined ? undefined : on}
       className={`${s.textBtn} ${className ?? ""}`}

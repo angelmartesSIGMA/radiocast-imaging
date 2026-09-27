@@ -226,6 +226,7 @@
   transition: background-color 0.12s;
 }
 .hint {
+  gap: 6px;
   position: sticky;
   left: 208px;
   display: inline-flex;
@@ -474,7 +475,7 @@
   top: 50%;
   z-index: 7;
   transform: translateY(-50%);
-  max-width: 360px;
+  width: min(420px, calc(100% - 208px - 80px));
   border-radius: 16px;
   border: 1px solid var(--line-2);
   background: rgba(23, 23, 27, 0.92);
@@ -509,4 +510,75 @@
   font-weight: 600;
   color: #000;
   cursor: pointer;
+}
+
+.clip[data-live="1"] {
+  filter: brightness(1.25) saturate(1.15);
+}
+.clip:hover:not([data-active]) {
+  filter: brightness(1.1);
+}
+.hoverLine {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 1px;
+  background: rgba(255, 255, 255, 0.22);
+  opacity: 0;
+  transition: opacity 0.12s;
+  will-change: transform;
+}
+.hoverTag {
+  position: absolute;
+  top: 7px;
+  left: 0;
+  z-index: 2;
+  margin-left: 4px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 1px 6px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--fg);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.12s;
+  white-space: nowrap;
+}
+.hintSub {
+  color: rgba(95, 95, 105, 0.75);
+}
+.tplGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 14px;
+}
+.tpl {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  border-radius: 12px;
+  border: 1px solid var(--line-2);
+  background: rgba(255, 255, 255, 0.03);
+  padding: 10px 12px;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+  transition: border-color 0.12s, background 0.12s, transform 0.12s;
+}
+.tpl:hover {
+  border-color: var(--violet);
+  background: rgba(139, 92, 246, 0.08);
+  transform: translateY(-1px);
+}
+.tplName {
+  font-size: 13px;
+  font-weight: 600;
+}
+.tplBlurb {
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--fg-2);
 }

@@ -24,7 +24,7 @@ app/                    layout, fonts, global tokens
 components/studio/      Header (transport), Library, Toolbar, Timeline, Inspector, SendDrawer, Overlays
 components/ui/          Icon set and shared controls (buttons, chips, sliders, switches)
 lib/audio/              engine (Web Audio scheduling, meters, offline render), synth generators, DSP helpers
-lib/studio/             store (state + actions + undo history), clock (60fps playhead), constants, formatting
+lib/studio/             store (state + actions + undo history), clock (60fps playhead), templates, IndexedDB audio store
 design/                 the original design file this prototype was built from
 ```
 
@@ -44,5 +44,18 @@ It's a port of `design/imaging-studio-v2.reference.html` with these additions:
 - **Clip indicator** on the output meter that stays lit until you click it.
 - **Send brief form**: deliverables, turnaround, a script word count with estimated read time checked against the target length, inline validation, and a summary screen after sending.
 - **Responsive layout.** Below 1024px the library becomes an overlay, and below 900px the inspector does too.
-- **Saved preferences.** Session name, mix settings, target length and brief details are kept in localStorage. Audio isn't saved.
 - Empty-session onboarding, ARIA roles and labels, and `prefers-reduced-motion` support.
+
+### Interaction and usability pass
+
+- **Guided tour** on first visit (5 steps with a spotlight). Replay it from the help dialog or ⌘K.
+- **Command palette (⌘K).** Search and run any action, add any sound at the playhead, start a template or set a target length.
+- **Double-click an empty spot on a track** to search for a sound and drop it right there.
+- **Templates.** Station ID :20 / :10, Sweeper :05, Liner :15 and Blank, from the header's New menu or from the empty-session cards. Starting one can be undone.
+- **Undo right in the toast** after deleting a clip, removing a track, splitting or starting a template.
+- **Autosave.** The session (clips, tracks, mix) is kept in localStorage, and uploads and recorded takes are kept in IndexedDB, so a reload restores everything. A header badge shows the save status.
+- **Record count-in.** 3-2-1 beeps with a big countdown. Press R or Esc to cancel, and switch it off in the inspector.
+- **Tooltips everywhere** that show the matching keyboard shortcut.
+- **Timeline feedback.** A hover line with a time readout, clips that light up while they play, and a progress bar on library previews.
+- **Precise clip editing.** Click Start or Length in the inspector to type a value, or nudge it with −/+. Double-click a library sound to add it at the playhead.
+- Quick duplicate and delete buttons appear in the toolbar when a clip is selected.

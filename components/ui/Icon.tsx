@@ -2,6 +2,10 @@ import type { SVGProps } from "react";
 
 const PATHS = {
   rewind: <path d="M6 5v14M19 5 9 12l10 7V5Z" />,
+  play: <path d="M7 5v14l11-7Z" />,
+  chevronDown: <path d="m6 9 6 6 6-6" />,
+  cloud: <path d="M7 18a5 5 0 0 1-.9-9.9A6 6 0 0 1 17.7 9 4.5 4.5 0 0 1 17.5 18Z" />,
+  sparkle: <path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8Z" />,
   download: <path d="M12 4v12m0 0-4.5-4.5M12 16l4.5-4.5M4 20h16" />,
   upload: <path d="M12 16V4m0 0-4.5 4.5M12 4l4.5 4.5M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />,
   search: (

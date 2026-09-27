@@ -9,21 +9,39 @@ import css from "./Toolbar.module.css";
 export function Toolbar() {
   const s = useStudio();
   const compact = s.vw < 760;
+  const hasSel = !!s.selected;
 
   return (
     <div className={css.bar} role="toolbar" aria-label="Editing tools">
-      <IconButton icon="panelLeft" label="Sound library" on={s.libOpen} onClick={() => s.set({ libOpen: !s.libOpen })} />
+      <IconButton
+        icon="panelLeft"
+        label="Sound library"
+        tip={s.libOpen ? "Hide library" : "Show library"}
+        on={s.libOpen}
+        onClick={() => s.set({ libOpen: !s.libOpen })}
+      />
       <Divider />
-      <IconButton icon="undo" label="Undo" title="Undo (⌘Z)" disabled={!s.past.length} onClick={s.undo} />
-      <IconButton icon="redo" label="Redo" title="Redo (⇧⌘Z)" disabled={!s.future.length} onClick={s.redo} />
+      <IconButton icon="undo" label="Undo" kbd="⌘Z" disabled={!s.past.length} onClick={s.undo} />
+      <IconButton icon="redo" label="Redo" kbd="⇧⌘Z" disabled={!s.future.length} onClick={s.redo} />
       <Divider />
-      <TextButton icon="split" onClick={s.split} title="Split at playhead (S)">
+      <TextButton icon="split" onClick={s.split} tip="Split at playhead" kbd="S">
         {!compact && "Split"}
       </TextButton>
-      <TextButton icon="magnet" on={s.snapOn} onClick={() => s.set({ snapOn: !s.snapOn })} title="Snap to grid and clip edges">
+      {hasSel && (
+        <>
+          <IconButton icon="copy" label="Duplicate clip" kbd="⌘D" onClick={() => s.duplicate()} />
+          <IconButton icon="trash" label="Delete clip" kbd="⌫" onClick={() => s.selected && s.removeClip(s.selected)} />
+        </>
+      )}
+      <TextButton
+        icon="magnet"
+        on={s.snapOn}
+        onClick={() => s.set({ snapOn: !s.snapOn })}
+        tip={s.snapOn ? "Snapping on — clips stick to the grid and to each other" : "Snapping off — free placement"}
+      >
         {!compact && "Snap"}
       </TextButton>
-      <label className={css.target} title="Target length — shows a marker and warns when you run over">
+      <label className={css.target} data-tip="Target length — marks the timeline and warns when you run over" data-tour="target">
         <Icon name="target" size={15} />
         {!compact && <span>Length</span>}
         <select
@@ -40,16 +58,26 @@ export function Toolbar() {
       </label>
 
       <div className={css.right}>
-        <IconButton icon="zoomOut" label="Zoom out" title="Zoom out (−, ⌘ scroll)" onClick={() => s.zoomBy(1 / 1.5)} />
-        <IconButton icon="zoomIn" label="Zoom in" title="Zoom in (+, ⌘ scroll)" onClick={() => s.zoomBy(1.5)} />
-        <TextButton onClick={s.zoomFit} title="Fit session">
+        <button type="button" className={css.cmd} onClick={() => s.set({ palette: {} })} data-tip="Search sounds and actions" data-kbd="⌘K">
+          <Icon name="search" size={14} />
+          {!compact && <span>Search or run…</span>}
+          {!compact && <kbd>⌘K</kbd>}
+        </button>
+        <Divider />
+        <IconButton icon="zoomOut" label="Zoom out" kbd="−" onClick={() => s.zoomBy(1 / 1.5)} />
+        <IconButton icon="zoomIn" label="Zoom in" kbd="+" onClick={() => s.zoomBy(1.5)} />
+        <TextButton onClick={s.zoomFit} tip="Fit the whole session in view">
           Fit
         </TextButton>
         <Divider />
-        {!compact && (
-          <IconButton icon="keyboard" label="Keyboard shortcuts" title="Keyboard shortcuts (?)" onClick={() => s.set({ shortcuts: true })} />
-        )}
-        <IconButton icon="panelRight" label="Inspector" on={s.inspOpen} onClick={() => s.set({ inspOpen: !s.inspOpen })} />
+        {!compact && <IconButton icon="keyboard" label="Help and shortcuts" kbd="?" onClick={() => s.set({ shortcuts: true })} />}
+        <IconButton
+          icon="panelRight"
+          label="Inspector"
+          tip={s.inspOpen ? "Hide inspector" : "Show inspector"}
+          on={s.inspOpen}
+          onClick={() => s.set({ inspOpen: !s.inspOpen })}
+        />
       </div>
     </div>
   );

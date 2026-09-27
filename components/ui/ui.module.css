@@ -182,3 +182,30 @@
   flex-shrink: 0;
   background: var(--line);
 }
+
+.tooltip {
+  position: fixed;
+  z-index: 200;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 260px;
+  border-radius: 8px;
+  border: 1px solid var(--line-2);
+  background: #1d1d22;
+  padding: 5px 9px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--fg);
+  box-shadow: 0 12px 24px -12px rgba(0, 0, 0, 0.9);
+  animation: fadeIn 0.12s ease-out;
+}
+.tooltipKbd {
+  border-radius: 4px;
+  border: 1px solid var(--line-2);
+  padding: 0 5px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--fg-2);
+}

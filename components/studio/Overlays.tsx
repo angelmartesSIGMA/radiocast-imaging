@@ -16,6 +16,7 @@ export function Overlays() {
       <Toast />
       <ClipMenu />
       <ShortcutsDialog />
+      <CountIn />
     </>
   );
 }
@@ -60,7 +61,20 @@ function Toast() {
   return (
     <div key={toast.id} className={css.pill} role="status" aria-live="polite" style={{ animation: "popIn 0.18s ease-out" }}>
       <span className={css.dot} style={{ background: toast.color }} />
-      {toast.msg}
+      <span className={css.toastMsg}>{toast.msg}</span>
+      {toast.action && (
+        <button
+          type="button"
+          className={css.toastAction}
+          onClick={() => {
+            toast.action!.run();
+            useStudio.getState().set({ toast: null });
+          }}
+        >
+          {toast.action.label}
+        </button>
+      )}
+      <span className={css.toastTimer} style={{ animationDuration: toast.action ? "5s" : "2.8s" }} />
     </div>
   );
 }
@@ -153,6 +167,35 @@ function ShortcutsDialog() {
             </div>
           ))}
         </div>
+        <div className={css.modalFoot}>
+          <button type="button" onClick={() => set({ shortcuts: false, tour: 0 })}>
+            <Icon name="sparkle" size={14} />
+            Take the tour again
+          </button>
+          <button type="button" onClick={() => set({ shortcuts: false, palette: {} })}>
+            <Icon name="search" size={14} />
+            Search every action
+            <Kbd>⌘K</Kbd>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CountIn() {
+  const n = useStudio((s) => s.countIn);
+  if (n == null) return null;
+  return (
+    <div className={css.countIn} role="status" aria-live="assertive">
+      <div className={css.countCard}>
+        <span key={n} className={css.countNum}>
+          {n}
+        </span>
+        <span className={css.countLabel}>Recording starts…</span>
+        <span className={css.countHint}>
+          Press <Kbd>R</Kbd> to cancel
+        </span>
       </div>
     </div>
   );

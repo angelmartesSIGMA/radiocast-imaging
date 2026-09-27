@@ -1,0 +1,95 @@
+.layer {
+  position: fixed;
+  inset: 0;
+  z-index: 95;
+}
+.spot {
+  position: fixed;
+  border-radius: 16px;
+  box-shadow: 0 0 0 2px rgba(167, 139, 250, 0.8), 0 0 0 9999px rgba(0, 0, 0, 0.62);
+  transition: left 0.3s ease, top 0.3s ease, width 0.3s ease, height 0.3s ease;
+  pointer-events: none;
+}
+.card {
+  position: fixed;
+  border-radius: 16px;
+  border: 1px solid var(--line-2);
+  background: var(--raised);
+  padding: 18px;
+  box-shadow: var(--shadow-pop);
+  animation: menuIn 0.2s ease-out;
+}
+.count {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 10.4px;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--violet);
+}
+.card h2 {
+  margin: 8px 0 0;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.body {
+  margin: 6px 0 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--fg-2);
+}
+.dots {
+  display: flex;
+  gap: 5px;
+  margin-top: 14px;
+}
+.dots span {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.15);
+  transition: width 0.2s, background 0.2s;
+}
+.dots span[data-on] {
+  width: 18px;
+  background: var(--violet);
+}
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 14px;
+}
+.skip,
+.back,
+.next {
+  border: 0;
+  border-radius: 999px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.skip {
+  margin-right: auto;
+  padding-left: 0;
+  background: transparent;
+  color: var(--fg-3);
+}
+.skip:hover {
+  color: var(--fg);
+}
+.back {
+  background: transparent;
+  color: var(--fg-2);
+}
+.back:hover {
+  background: var(--hover);
+  color: var(--fg);
+}
+.next {
+  background: #fff;
+  color: #000;
+  font-weight: 600;
+}

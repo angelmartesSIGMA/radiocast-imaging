@@ -5,6 +5,7 @@ import { clock, dom } from "@/lib/studio/clock";
 import { HEADER_W, TRACK_TYPES } from "@/lib/studio/constants";
 import { fmt, fmtDb, fmtSec, fmtShort } from "@/lib/studio/format";
 import { useStudio } from "@/lib/studio/store";
+import { TEMPLATES } from "@/lib/studio/templates";
 import type { Clip, ClipHandle, Lane, Sound } from "@/lib/studio/types";
 import { Icon } from "@/components/ui/Icon";
 import css from "./Timeline.module.css";
@@ -19,6 +20,8 @@ export function Timeline() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const playheadRef = useRef<HTMLDivElement>(null);
   const headRef = useRef<HTMLSpanElement>(null);
+  const hoverRef = useRef<HTMLDivElement>(null);
+  const hoverTagRef = useRef<HTMLSpanElement>(null);
   const ppsSet = useRef(false);
 
   const pps = s.pps;
@@ -62,6 +65,16 @@ export function Timeline() {
         const x = t * st.pps;
         if (playheadRef.current) playheadRef.current.style.transform = `translateX(${HEADER_W + x}px)`;
         if (headRef.current) headRef.current.style.transform = `translateX(${x}px)`;
+        // Light up clips under the playhead while playing.
+        const inner = scrollRef.current;
+        if (inner) {
+          for (const c of st.clips) {
+            const el = inner.querySelector<HTMLElement>(`[data-clip-id="${c.id}"]`);
+            if (!el) continue;
+            const live = st.playing && t >= c.start && t < c.start + c.len;
+            if (live !== (el.dataset.live === "1")) el.dataset.live = live ? "1" : "";
+          }
+        }
         const sc = scrollRef.current;
         if (sc && st.playing) {
           const px = HEADER_W + x;
@@ -94,10 +107,30 @@ export function Timeline() {
     window.addEventListener("pointerup", up);
   };
 
+  const onHover = (e: React.PointerEvent<HTMLDivElement>) => {
+    const line = hoverRef.current;
+    const tagEl = hoverTagRef.current;
+    if (!line || !tagEl) return;
+    const r = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - r.left - HEADER_W;
+    const sc = scrollRef.current;
+    const visible = x >= 0 && (!sc || e.clientX - sc.getBoundingClientRect().left > HEADER_W) && !useStudio.getState().drag;
+    line.style.opacity = visible ? "1" : "0";
+    tagEl.style.opacity = visible ? "1" : "0";
+    if (!visible) return;
+    line.style.transform = `translateX(${HEADER_W + x}px)`;
+    tagEl.style.transform = `translateX(${x}px)`;
+    tagEl.textContent = fmt(x / pps);
+  };
+  const hideHover = () => {
+    if (hoverRef.current) hoverRef.current.style.opacity = "0";
+    if (hoverTagRef.current) hoverTagRef.current.style.opacity = "0";
+  };
+
   return (
-    <div className={css.frame}>
+    <div className={css.frame} data-tour="timeline">
       <div ref={scrollRef} className={css.scroll}>
-        <div className={css.inner} style={{ width: HEADER_W + trackW }}>
+        <div className={css.inner} style={{ width: HEADER_W + trackW }} onPointerMove={onHover} onPointerLeave={hideHover}>
           {/* ruler */}
           <div className={css.rulerRow}>
             <div className={css.rulerCorner}>{s.lanes.length} tracks</div>
@@ -117,6 +150,7 @@ export function Timeline() {
                   :{String(s.target).padStart(2, "0")}
                 </span>
               )}
+              <span ref={hoverTagRef} className={css.hoverTag} aria-hidden="true" />
               <span ref={headRef} className={css.head}>
                 <span />
               </span>
@@ -136,7 +170,7 @@ export function Timeline() {
                   type="button"
                   className={css.addBtn}
                   onClick={() => s.addLane(t)}
-                  title={`Add a ${TRACK_TYPES[t].label.toLowerCase()} track`}
+                  data-tip={`Add a ${TRACK_TYPES[t].label.toLowerCase()} track`}
                 >
                   <Icon name="plus" size={11} strokeWidth={2.4} />
                   {t === "voice" ? "Voice" : t === "bed" ? "Bed" : "FX"}
@@ -152,6 +186,7 @@ export function Timeline() {
                 <span className={css.targetLine} />
               </div>
             )}
+            <div ref={hoverRef} className={css.hoverLine} />
             <div ref={playheadRef} className={css.playhead} />
             {s.snapT != null && <div className={css.snapLine} style={{ left: HEADER_W + s.snapT * pps }} />}
           </div>
@@ -164,16 +199,23 @@ export function Timeline() {
 }
 
 function EmptyState() {
+  const st = useStudio.getState;
   return (
     <div className={css.emptyState}>
       <p className="eyebrow">Empty session</p>
-      <p className={css.emptyTitle}>Start with a bed, then build around it</p>
+      <p className={css.emptyTitle}>Start from a template, or build your own</p>
+      <div className={css.tplGrid}>
+        {TEMPLATES.filter((t) => t.clips.length).map((t) => (
+          <button key={t.id} type="button" className={css.tpl} onClick={() => st().newSession(t.id)}>
+            <span className={css.tplName}>{t.name}</span>
+            <span className={css.tplBlurb}>{t.blurb}</span>
+          </button>
+        ))}
+      </div>
       <p className={css.emptySub}>
-        Drag sounds from the library, drop your own files anywhere, or press <b>R</b> to record a voice take.
+        Or drag sounds from the library, drop your own files anywhere, double-click a track to search, or press <b>R</b> to
+        record a voice take.
       </p>
-      <button type="button" className={css.emptyBtn} onClick={() => useStudio.getState().set({ libOpen: true })}>
-        Open the library
-      </button>
     </div>
   );
 }
@@ -238,7 +280,7 @@ const LaneRow = memo(function LaneRow({
               aria-label="Track name"
             />
           ) : (
-            <span className={css.laneName} onDoubleClick={() => st().set({ renaming: lane.id })} title="Double-click to rename">
+            <span className={css.laneName} onDoubleClick={() => st().set({ renaming: lane.id })} data-tip="Double-click to rename">
               {lane.label}
             </span>
           )}
@@ -248,7 +290,7 @@ const LaneRow = memo(function LaneRow({
               className={css.laneRemove}
               onClick={() => st().removeLane(lane.id)}
               aria-label={`Remove ${lane.label}`}
-              title={clips.length ? "Remove track and its clips" : "Remove track"}
+              data-tip={clips.length ? "Remove track and its clips" : "Remove track"}
             >
               <Icon name="close" size={11} strokeWidth={2.4} />
             </button>
@@ -261,7 +303,7 @@ const LaneRow = memo(function LaneRow({
             data-on={lane.mute ? "mute" : undefined}
             aria-pressed={lane.mute}
             onClick={() => st().setLane(lane.id, { mute: !lane.mute })}
-            title="Mute"
+            data-tip={lane.mute ? "Unmute" : "Mute"}
           >
             M
           </button>
@@ -271,7 +313,7 @@ const LaneRow = memo(function LaneRow({
             data-on={lane.solo ? "solo" : undefined}
             aria-pressed={lane.solo}
             onClick={() => st().setLane(lane.id, { solo: !lane.solo })}
-            title="Solo"
+            data-tip={lane.solo ? "Unsolo" : "Solo — hear only this track"}
           >
             S
           </button>
@@ -284,7 +326,7 @@ const LaneRow = memo(function LaneRow({
             onPointerDown={() => st().commit()}
             onChange={(e) => st().setLane(lane.id, { gain: +e.target.value })}
             onDoubleClick={() => st().setLane(lane.id, { gain: 0 })}
-            title={`${fmtDb(lane.gain)} — double-click to reset`}
+            data-tip={`Track volume ${fmtDb(lane.gain)} · double-click to reset`}
             aria-label={`${lane.label} volume`}
             style={{ "--fill": `${((lane.gain + 24) / 30) * 100}%` } as React.CSSProperties}
           />
@@ -320,6 +362,11 @@ const LaneRow = memo(function LaneRow({
           window.dispatchEvent(new Event("studio:filedrop-reset"));
           void st().importFiles(Array.from(e.dataTransfer.files), { lane: lane.id, at });
         }}
+        onDoubleClick={(e) => {
+          if ((e.target as HTMLElement).closest("[data-clip]")) return;
+          const r = e.currentTarget.getBoundingClientRect();
+          st().set({ palette: { lane: lane.id, at: st().snapTime((e.clientX - r.left) / pps, 0, null).t } });
+        }}
         onPointerDown={(e) => {
           if (e.button !== 0 || (e.target as HTMLElement).closest("[data-clip]")) return;
           st().set({ selected: null, menu: null });
@@ -327,7 +374,12 @@ const LaneRow = memo(function LaneRow({
           st().seek((e.clientX - r.left) / pps);
         }}
       >
-        {!clips.length && !ghost && !recHere && <div className={css.hint}>{T.hint}</div>}
+        {!clips.length && !ghost && !recHere && (
+          <div className={css.hint}>
+            <span>{T.hint}</span>
+            <span className={css.hintSub}>· double-click to search</span>
+          </div>
+        )}
 
         {clips.map((c) => {
           const snd = sounds.find((x) => x.id === c.soundId);
@@ -475,6 +527,7 @@ function ClipView({
   return (
     <div
       data-clip
+      data-clip-id={c.id}
       className={css.clip}
       data-selected={selected || undefined}
       data-active={active || undefined}
@@ -515,12 +568,12 @@ function ClipView({
         <polyline points={`0,100 ${fi},0`} fill="none" stroke="#F4F4F8" strokeOpacity={0.7} strokeWidth={1} vectorEffect="non-scaling-stroke" />
         <polyline points={`${100 - fo},0 100,100`} fill="none" stroke="#F4F4F8" strokeOpacity={0.7} strokeWidth={1} vectorEffect="non-scaling-stroke" />
       </svg>
-      <div data-handle="trimL" className={`${css.trim} ${css.trimL}`} title="Trim start" />
-      <div data-handle="trimR" className={`${css.trim} ${css.trimR}`} title="Trim end" />
+      <div data-handle="trimL" className={`${css.trim} ${css.trimL}`} data-tip="Drag to trim the start" />
+      <div data-handle="trimR" className={`${css.trim} ${css.trimR}`} data-tip="Drag to trim the end" />
       {(selected || hover) && w > 36 && (
         <>
-          <div data-handle="fadeIn" className={css.fadeKnob} style={{ left: fiX, borderColor: T.color }} title="Fade in" />
-          <div data-handle="fadeOut" className={css.fadeKnob} style={{ left: foX, borderColor: T.color }} title="Fade out" />
+          <div data-handle="fadeIn" className={css.fadeKnob} style={{ left: fiX, borderColor: T.color }} data-tip="Drag to fade in" />
+          <div data-handle="fadeOut" className={css.fadeKnob} style={{ left: foX, borderColor: T.color }} data-tip="Drag to fade out" />
         </>
       )}
     </div>

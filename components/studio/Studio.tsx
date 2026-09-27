@@ -7,10 +7,13 @@ import { useStudio, type StudioState } from "@/lib/studio/store";
 import { Header } from "./Header";
 import { Inspector } from "./Inspector";
 import { Library } from "./Library";
+import { TooltipLayer } from "@/components/ui/Tooltip";
 import { Overlays } from "./Overlays";
+import { Palette } from "./Palette";
 import { SendDrawer } from "./SendDrawer";
 import { Timeline } from "./Timeline";
 import { Toolbar } from "./Toolbar";
+import { Tour } from "./Tour";
 import css from "./Studio.module.css";
 
 const hasFiles = (e: DragEvent) => Array.from(e.dataTransfer?.types ?? []).includes("Files");
@@ -24,7 +27,12 @@ export default function Studio() {
 
   useEffect(() => {
     const st = useStudio.getState;
-    st().init();
+    void st()
+      .init()
+      .then(() => {
+        // First visit: walk through the studio once.
+        if (!st().tourDone && window.innerWidth >= 900) setTimeout(() => st().set({ tour: 0 }), 700);
+      });
 
     // transport clock
     let raf = 0;
@@ -124,6 +132,9 @@ export default function Studio() {
       </div>
       <Overlays />
       <SendDrawer />
+      <Palette />
+      <Tour />
+      <TooltipLayer />
     </div>
   );
 }
@@ -135,15 +146,21 @@ function handleKey(e: KeyboardEvent) {
   const typing = tag === "textarea" || tag === "select" || (tag === "input" && (el as HTMLInputElement).type !== "range");
 
   if (e.key === "Escape") {
+    if (s.countIn != null) return void s.toggleRecord();
     if (s.menu) return s.set({ menu: null });
     if (s.shortcuts) return s.set({ shortcuts: false });
     if (s.drawer) return s.set({ drawer: false });
     if (typing) return el.blur();
     return s.set({ selected: null });
   }
-  if (typing || s.drawer || el.isContentEditable) return;
-
   const mod = e.metaKey || e.ctrlKey;
+  if (mod && e.key.toLowerCase() === "k") {
+    e.preventDefault();
+    s.set({ palette: s.palette ? null : {} });
+    return;
+  }
+  if (typing || s.drawer || s.palette || el.isContentEditable) return;
+
   const key = e.key.toLowerCase();
   const sel = s.selected;
 
