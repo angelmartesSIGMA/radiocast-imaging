@@ -1,28 +1,60 @@
 .bar {
-  height: 52px;
+  height: 50px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 0 16px;
+  gap: 8px;
+  padding: 0 12px;
   overflow-x: auto;
   scrollbar-width: none;
 }
-.right {
-  margin-left: auto;
+.bar::-webkit-scrollbar {
+  display: none;
+}
+.spacer {
+  flex: 1;
+  min-width: 8px;
+}
+
+/* A segment of related controls. */
+.group {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 1px;
+  height: 32px;
+  padding: 2px;
+  border-radius: 9px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  flex-shrink: 0;
 }
+.group > button,
+.group > label {
+  height: 26px !important;
+  border-radius: 7px !important;
+}
+.group > button:not([class*="textBtn"]) {
+  width: 28px !important;
+}
+.group button[class*="textBtn"] {
+  padding: 0 8px;
+  font-size: 12.5px;
+}
+.group button[data-on] {
+  background: var(--active) !important;
+  color: var(--fg) !important;
+}
+.group button[class*="textBtn"][data-on] svg {
+  color: var(--accent);
+}
+
 .target {
   position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  height: 34px;
-  border-radius: 10px;
-  padding: 0 6px 0 10px;
-  font-size: 13px;
+  gap: 6px;
+  padding: 0 8px;
+  font-size: 12.5px;
   font-weight: 500;
   color: var(--fg-2);
   cursor: pointer;
@@ -33,28 +65,32 @@
 }
 .target select {
   appearance: none;
-  border: 1px solid var(--line-2);
-  border-radius: 8px;
-  background: var(--bg-sunk);
-  padding: 3px 8px;
-  font-family: var(--font-mono);
-  font-size: 12px;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
   color: var(--fg);
   cursor: pointer;
   outline: none;
 }
-.target select:focus-visible {
-  border-color: var(--violet);
+.target select option {
+  background: var(--raised);
 }
+.target svg:last-child {
+  color: var(--fg-3);
+}
+
 .cmd {
   display: inline-flex;
   align-items: center;
   gap: 8px;
   height: 32px;
-  border-radius: 10px;
+  flex-shrink: 0;
+  border-radius: 9px;
   border: 1px solid var(--line);
-  background: var(--bg-sunk);
-  padding: 0 8px 0 10px;
+  background: var(--panel);
+  padding: 0 6px 0 10px;
   font-size: 12.5px;
   color: var(--fg-3);
   cursor: pointer;
@@ -66,14 +102,14 @@
   color: var(--fg-2);
 }
 .cmd span {
-  min-width: 96px;
+  min-width: 110px;
   text-align: left;
 }
 .cmd kbd {
   border-radius: 5px;
-  border: 1px solid var(--line-2);
-  padding: 0 5px;
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  color: var(--fg-2);
+  background: rgba(255, 255, 255, 0.06);
+  padding: 1px 6px;
+  font-family: var(--font-sans-stack);
+  font-size: 11px;
+  color: var(--fg-3);
 }

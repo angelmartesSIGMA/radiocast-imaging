@@ -46,9 +46,15 @@ It's a port of `design/imaging-studio-v2.reference.html` with these additions:
 - **Responsive layout.** Below 1024px the library becomes an overlay, and below 900px the inspector does too.
 - Empty-session onboarding, ARIA roles and labels, and `prefers-reduced-motion` support.
 
+### Visual design
+
+- Geist typeface, a neutral dark palette, and an accent colour taken from the logo's magenta.
+- Each track gets its own colour (a second FX track is pink, not another amber). Clips use tinted gradients, show higher-resolution waveforms, and hide their labels when they're too narrow to read.
+- A single transport pill in the header (play, record, loop, time, target status and a gradient level meter). The session title shows its save status underneath.
+- A grouped, segmented toolbar; a library with a segmented filter and section headings; and a quieter inspector with compact switches.
+
 ### Interaction and usability pass
 
-- **Guided tour** on first visit (5 steps with a spotlight). Replay it from the help dialog or ⌘K.
 - **Command palette (⌘K).** Search and run any action, add any sound at the playhead, start a template or set a target length.
 - **Double-click an empty spot on a track** to search for a sound and drop it right there.
 - **Templates.** Station ID :20 / :10, Sweeper :05, Liner :15 and Blank, from the header's New menu or from the empty-session cards. Starting one can be undone.

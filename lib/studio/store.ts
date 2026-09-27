@@ -100,8 +100,6 @@ export interface StudioState {
   drawer: boolean;
   shortcuts: boolean;
   palette: PaletteCtx | null;
-  tour: number | null;
-  tourDone: boolean;
 
   // brief
   sent: boolean;
@@ -231,8 +229,6 @@ export const useStudio = create<Studio>()(
       drawer: false,
       shortcuts: false,
       palette: null,
-      tour: null,
-      tourDone: false,
 
       sent: false,
       station: "",
@@ -282,7 +278,14 @@ export const useStudio = create<Studio>()(
         s.commit();
         clock.set(0);
         set({ clips: buildClips(t.id), lanes: defaultLanes(), target: t.target, projectName: t.title, selected: null, palette: null });
-        get().toastMsg(`Started “${t.name}”`, COLORS.violet, undoAction());
+        const prev = { projectName: s.projectName, target: s.target };
+        get().toastMsg(`Started “${t.name}”`, COLORS.violet, {
+          label: "Undo",
+          run: () => {
+            get().undo();
+            set(prev);
+          },
+        });
         requestAnimationFrame(() => get().zoomFit());
       },
 
@@ -703,7 +706,6 @@ export const useStudio = create<Studio>()(
         clips: s.clips,
         lanes: s.lanes,
         countInOn: s.countInOn,
-        tourDone: s.tourDone,
         projectName: s.projectName,
         master: s.master,
         duck: s.duck,

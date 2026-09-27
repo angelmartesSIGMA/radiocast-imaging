@@ -19,76 +19,89 @@ export function Header() {
   return (
     <header className={css.header}>
       <div className={css.left}>
-        <div className={css.brand}>
-          <Image src="/radiocast-logo.png" alt="Radiocast" width={32} height={32} draggable={false} priority />
-          {wide && (
-            <div className={css.brandText}>
-              <p className={css.brandName}>Radiocast</p>
-              <p className={css.brandSub}>Imaging</p>
-            </div>
-          )}
-        </div>
-        <span className={css.vr} />
-        <input
-          className={css.projectName}
-          value={s.projectName}
-          onChange={(e) => s.set({ projectName: e.target.value })}
-          onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
-          aria-label="Session name"
-          data-tip="Rename session"
-          spellCheck={false}
+        <Image
+          className={css.logo}
+          src="/radiocast-logo.png"
+          alt="Radiocast"
+          width={28}
+          height={28}
+          draggable={false}
+          priority
         />
-        <NewMenu />
-        {s.vw >= 1360 && <SavedBadge />}
+        <div className={css.session}>
+          <div className={css.titleRow}>
+            <input
+              className={css.projectName}
+              value={s.projectName}
+              onChange={(e) => s.set({ projectName: e.target.value })}
+              onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+              aria-label="Session name"
+              spellCheck={false}
+            />
+            <NewMenu />
+          </div>
+          <div className={css.meta}>
+            <SavedBadge />
+            <span className={css.metaDot} />
+            <span>
+              {s.clips.length} clip{s.clips.length === 1 ? "" : "s"}
+            </span>
+            <span className={css.metaDot} />
+            <span>{s.lanes.length} tracks</span>
+          </div>
+        </div>
       </div>
 
-      <div className={css.transport} data-tour="transport">
-        <IconButton icon="rewind" label="Back to start" kbd="Home" round onClick={() => s.seek(0)} />
-        <button
-          type="button"
-          className={css.play}
-          onClick={s.togglePlay}
-          aria-label={s.playing ? "Pause" : "Play"}
-          data-tip={s.playing ? "Pause" : "Play"}
-          data-kbd="Space"
-        >
-          {s.playing ? <PauseGlyph /> : <PlayGlyph />}
-        </button>
-        <button
-          type="button"
-          className={css.rec}
-          data-on={s.recording || s.countIn != null || undefined}
-          onClick={() => void s.toggleRecord()}
-          aria-label={s.recording ? "Stop recording" : "Record"}
-          aria-pressed={s.recording}
-          data-tip={s.recording ? "Stop recording" : s.countIn != null ? "Cancel count-in" : "Record a voice take over the mix"}
-          data-kbd="R"
-        >
-          <span />
-        </button>
-        <IconButton
-          icon="loop"
-          label="Loop playback"
-          tip={s.target ? "Loop to the target length" : "Loop the session"}
-          kbd="L"
-          round
-          on={s.loop}
-          onClick={() => s.set({ loop: !s.loop })}
-        />
-        <div className={css.clock}>
-          <div className={css.time}>
-            <TimeReadout />
-            <span className={css.end}>/ {fmtShort(end)}</span>
-          </div>
-          <TargetBadge end={end} target={s.target} />
-          <Meters />
+      <div className={css.transport}>
+        <div className={css.buttons}>
+          <IconButton icon="rewind" label="Back to start" kbd="Home" round size={15} onClick={() => s.seek(0)} />
+          <button
+            type="button"
+            className={css.play}
+            data-playing={s.playing || undefined}
+            onClick={s.togglePlay}
+            aria-label={s.playing ? "Pause" : "Play"}
+            data-tip={s.playing ? "Pause" : "Play"}
+            data-kbd="Space"
+          >
+            {s.playing ? <PauseGlyph size={15} /> : <PlayGlyph size={15} />}
+          </button>
+          <button
+            type="button"
+            className={css.rec}
+            data-on={s.recording || s.countIn != null || undefined}
+            onClick={() => void s.toggleRecord()}
+            aria-label={s.recording ? "Stop recording" : "Record"}
+            aria-pressed={s.recording}
+            data-tip={s.recording ? "Stop recording" : s.countIn != null ? "Cancel count-in" : "Record a voice take"}
+            data-kbd="R"
+          >
+            <span />
+          </button>
+          <IconButton
+            icon="loop"
+            label="Loop playback"
+            tip={s.target ? "Loop to the target length" : "Loop the session"}
+            kbd="L"
+            round
+            size={15}
+            on={s.loop}
+            onClick={() => s.set({ loop: !s.loop })}
+          />
         </div>
-        {s.recording && (
-          <span className={css.recBadge} role="status">
-            <span className={css.recDot} />
-            Recording
-          </span>
-        )}
+        <span className={css.sep} />
+        <div className={css.time}>
+          {s.recording ? (
+            <span className={css.recLabel} role="status">
+              <span className={css.recDot} />
+              REC
+            </span>
+          ) : null}
+          <TimeReadout />
+          <span className={css.end}>{fmtShort(end)}</span>
+        </div>
+        <TargetBadge end={end} target={s.target} />
+        <Meters />
       </div>
 
       <div className={css.right}>
@@ -99,20 +112,19 @@ export function Header() {
           disabled={s.exporting}
           data-tip="Download a 44.1 kHz stereo WAV of the mix"
           aria-label="Export WAV"
-          style={{ padding: wide ? "0 16px" : 0 }}
+          data-icon-only={!wide || undefined}
         >
           <Icon name="download" size={15} />
-          {wide && (s.exporting ? "Rendering…" : "Export WAV")}
+          {wide && (s.exporting ? "Rendering…" : "Export")}
         </button>
         <button
           type="button"
           className={css.primaryBtn}
-          data-tour="send"
           data-tip="Get a finished, voiced version from a Radiocast producer"
           onClick={() => s.set({ drawer: true, sent: false })}
         >
-          <Icon name="send" size={14} />
           {s.vw >= 720 ? "Send to producers" : "Send"}
+          <Icon name="send" size={13} />
         </button>
       </div>
     </header>
@@ -144,7 +156,8 @@ function TargetBadge({ end, target }: { end: number; target: number | null }) {
     text = `${(-diff).toFixed(1)}s left`;
   }
   return (
-    <span className={css.target} data-tone={tone} title={`Target length :${String(target).padStart(2, "0")}`}>
+    <span className={css.target} data-tone={tone} data-tip={`Target length :${String(target).padStart(2, "0")}`}>
+      <span className={css.targetDot} />
       {text}
     </span>
   );
@@ -167,8 +180,8 @@ function Meters() {
         [r, pr],
       ] as const) {
         if (!ref.current) continue;
-        ref.current.style.width = `${w(v)}%`;
-        ref.current.style.background = v > 0.97 ? "var(--red)" : v > 0.7 ? "var(--amber)" : "var(--violet)";
+        // The track is a fixed green→amber→red gradient; this cover hides everything above the level.
+        ref.current.style.transform = `scaleX(${1 - w(v) / 100})`;
       }
       if (!clippedRef.current && Math.max(pl, pr) > 0.99) {
         clippedRef.current = true;
@@ -184,10 +197,10 @@ function Meters() {
     <div className={css.meterWrap}>
       <div className={css.meters} data-tip="Output level (L / R)">
         <span className={css.meterTrack}>
-          <span ref={l} className={css.meterFill} />
+          <span ref={l} className={css.meterCover} />
         </span>
         <span className={css.meterTrack}>
-          <span ref={r} className={css.meterFill} />
+          <span ref={r} className={css.meterCover} />
         </span>
       </div>
       <button
@@ -231,10 +244,10 @@ function NewMenu() {
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen(!open)}
-        data-tip="Start a new session from a template"
+        data-tip="New session from a template"
+        aria-label="New session"
       >
-        New
-        <Icon name="chevronDown" size={13} />
+        <Icon name="chevronDown" size={14} />
       </button>
       {open && (
         <div
@@ -288,7 +301,7 @@ function SavedBadge() {
   }, []);
   return (
     <span className={css.saved} data-saving={saving || undefined} data-tip="Your session and uploads are saved in this browser">
-      <Icon name={saving ? "cloud" : "check"} size={12} />
+      <span className={css.savedDot} />
       {saving ? "Saving…" : "Saved"}
     </span>
   );

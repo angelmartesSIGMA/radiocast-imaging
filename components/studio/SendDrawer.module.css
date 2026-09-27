@@ -153,8 +153,8 @@
   flex-shrink: 0;
   border-radius: 10px;
   border: 1px solid var(--line-2);
-  background: rgba(139, 92, 246, 0.07);
-  color: var(--violet);
+  background: var(--accent-soft);
+  color: var(--accent);
 }
 .attachMeta {
   min-width: 0;
@@ -196,8 +196,8 @@
   border-color: var(--line-2);
 }
 .turnOpt[aria-checked="true"] {
-  border-color: var(--violet);
-  background: rgba(139, 92, 246, 0.08);
+  border-color: var(--accent);
+  background: var(--accent-soft);
 }
 .turnLabel {
   font-size: 13px;

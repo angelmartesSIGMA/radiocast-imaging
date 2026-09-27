@@ -7,9 +7,16 @@ import { GROUPS, TRACK_TYPES } from "@/lib/studio/constants";
 import { fmtShort } from "@/lib/studio/format";
 import { useStudio } from "@/lib/studio/store";
 import type { LibraryFilter, Sound } from "@/lib/studio/types";
-import { Chip } from "@/components/ui/controls";
 import { Icon, PauseGlyph, PlayGlyph } from "@/components/ui/Icon";
 import css from "./Library.module.css";
+
+const SECTION_TITLES: Record<string, string> = {
+  Bed: "Music beds",
+  Sweep: "Sweeps",
+  Hit: "Hits & drops",
+  FX: "FX",
+  Stinger: "Stingers",
+};
 
 const FILTERS: [LibraryFilter, string][] = [
   ["all", "All"],
@@ -45,12 +52,23 @@ export function Library({ floating }: { floating: boolean }) {
         .sort((a, b) => Number(b.user) - Number(a.user)),
     [sounds, filter, q],
   );
+  // Group under headings when browsing everything; flat list for searches.
+  const sections = useMemo(() => {
+    if (q) return [{ title: `${list.length} result${list.length === 1 ? "" : "s"}`, items: list }];
+    const out: { title: string; items: Sound[] }[] = [];
+    for (const snd of list) {
+      const title = snd.user ? "Your audio" : SECTION_TITLES[snd.kind] ?? snd.kind;
+      const sec = out.find((x) => x.title === title);
+      if (sec) sec.items.push(snd);
+      else out.push({ title, items: [snd] });
+    }
+    return out;
+  }, [list, q]);
 
   return (
     <aside
       className={`${css.lib} ${floating ? css.floating : ""}`}
       aria-label="Sound library"
-      data-tour="library"
       onDragOver={(e) => {
         if (!e.dataTransfer.types.includes("Files")) return;
         e.preventDefault();
@@ -66,8 +84,10 @@ export function Library({ floating }: { floating: boolean }) {
     >
       <div className={css.head}>
         <div className={css.titleRow}>
-          <p className="eyebrow">Sounds</p>
-          <button type="button" className={css.import} onClick={() => dom.fileInput?.click()}>
+          <p className={css.title}>
+            Sounds <span className={css.count}>{sounds.length || ""}</span>
+          </p>
+          <button type="button" className={css.import} onClick={() => dom.fileInput?.click()} data-tip="Import audio files">
             <Icon name="upload" size={13} />
             Import
           </button>
@@ -86,18 +106,29 @@ export function Library({ floating }: { floating: boolean }) {
             </button>
           )}
         </label>
-        <div className={css.filters} role="radiogroup" aria-label="Filter sounds">
+        <div className={css.segments} role="radiogroup" aria-label="Filter sounds">
           {filters.map(([id, label]) => (
-            <Chip key={id} role="radio" on={filter === id} onClick={() => set({ filter: id })}>
-              {label}
-            </Chip>
+            <button
+              key={id}
+              type="button"
+              role="radio"
+              aria-checked={filter === id}
+              onClick={() => set({ filter: id })}
+            >
+              {id === "yours" ? "Yours" : label}
+            </button>
           ))}
         </div>
       </div>
 
       <div className={css.list}>
-        {list.map((s) => (
-          <SoundRow key={s.id} s={s} previewing={previewId === s.id} dragging={dragId === s.id} />
+        {sections.map((sec) => (
+          <section key={sec.title} className={css.section}>
+            <p className={css.sectionTitle}>{sec.title}</p>
+            {sec.items.map((snd) => (
+              <SoundRow key={snd.id} s={snd} previewing={previewId === snd.id} dragging={dragId === snd.id} />
+            ))}
+          </section>
         ))}
         {sounds.length > 0 && !list.length && (
           <p className={css.empty}>{q ? `Nothing matches “${search}”` : "Nothing here yet"}</p>
@@ -113,13 +144,9 @@ export function Library({ floating }: { floating: boolean }) {
 
       <div className={css.foot}>
         <button type="button" className={css.drop} data-on={libHover || undefined} onClick={() => dom.fileInput?.click()}>
-          <span className={css.dropIcon}>
-            <Icon name="upload" size={15} />
-          </span>
-          <span>
-            <span className={css.dropTitle}>Drop your own audio</span>
-            <span className={css.dropSub}>WAV, MP3, AIFF, M4A, FLAC</span>
-          </span>
+          <Icon name="upload" size={14} />
+          <span className={css.dropTitle}>Drop audio files here</span>
+          <span className={css.dropSub}>or browse</span>
         </button>
       </div>
     </aside>
@@ -176,7 +203,7 @@ function SoundRow({ s, previewing, dragging }: { s: Sound; previewing: boolean; 
       data-tip="Drag onto a track · double-click to add at playhead"
     >
       {previewing && <PreviewBar color={T.color} />}
-      <span className={css.thumb} style={{ background: T.soft }}>
+      <span className={css.thumb} style={{ background: T.soft, color: T.color }}>
         <svg viewBox="0 0 100 40" preserveAspectRatio="none">
           <path d={s.path} fill={T.color} />
         </svg>

@@ -75,7 +75,6 @@ function PaletteInner() {
       { id: "lib", group: "View", label: s.libOpen ? "Hide library" : "Show library", icon: "panelLeft", run: done(() => st().set({ libOpen: !st().libOpen })) },
       { id: "insp", group: "View", label: s.inspOpen ? "Hide inspector" : "Show inspector", icon: "panelRight", run: done(() => st().set({ inspOpen: !st().inspOpen })) },
       { id: "keys", group: "Help", label: "Keyboard shortcuts", icon: "keyboard", kbd: "?", run: done(() => st().set({ shortcuts: true })) },
-      { id: "tour", group: "Help", label: "Take the tour", icon: "sparkle", run: done(() => st().set({ tour: 0, libOpen: true })) },
     ];
     const templates: Item[] = TEMPLATES.map((t) => ({
       id: `tpl-${t.id}`,

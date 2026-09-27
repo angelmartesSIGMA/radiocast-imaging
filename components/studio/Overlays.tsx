@@ -168,10 +168,6 @@ function ShortcutsDialog() {
           ))}
         </div>
         <div className={css.modalFoot}>
-          <button type="button" onClick={() => set({ shortcuts: false, tour: 0 })}>
-            <Icon name="sparkle" size={14} />
-            Take the tour again
-          </button>
           <button type="button" onClick={() => set({ shortcuts: false, palette: {} })}>
             <Icon name="search" size={14} />
             Search every action

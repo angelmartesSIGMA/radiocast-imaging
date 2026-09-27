@@ -4,6 +4,7 @@ import { memo, useEffect, useRef, useState } from "react";
 import { clock, dom } from "@/lib/studio/clock";
 import { HEADER_W, TRACK_TYPES } from "@/lib/studio/constants";
 import { fmt, fmtDb, fmtSec, fmtShort } from "@/lib/studio/format";
+import { laneColor } from "@/lib/studio/colors";
 import { useStudio } from "@/lib/studio/store";
 import { TEMPLATES } from "@/lib/studio/templates";
 import type { Clip, ClipHandle, Lane, Sound } from "@/lib/studio/types";
@@ -128,12 +129,12 @@ export function Timeline() {
   };
 
   return (
-    <div className={css.frame} data-tour="timeline">
+    <div className={css.frame}>
       <div ref={scrollRef} className={css.scroll}>
         <div className={css.inner} style={{ width: HEADER_W + trackW }} onPointerMove={onHover} onPointerLeave={hideHover}>
           {/* ruler */}
           <div className={css.rulerRow}>
-            <div className={css.rulerCorner}>{s.lanes.length} tracks</div>
+            <div className={css.rulerCorner}>Tracks</div>
             <div
               className={css.ruler}
               onPointerDown={onRulerDown}
@@ -232,6 +233,8 @@ const LaneRow = memo(function LaneRow({
   majorPx: number;
 }) {
   const T = TRACK_TYPES[lane.type];
+  const allLanes = useStudio((s) => s.lanes);
+  const LC = laneColor(lane, allLanes);
   const clips = useStudio((s) => s.clips).filter((c) => c.lane === lane.id);
   const sounds = useStudio((s) => s.sounds);
   const selected = useStudio((s) => s.selected);
@@ -252,10 +255,10 @@ const LaneRow = memo(function LaneRow({
   const showTag = (ghost && dragging) || (act && tag);
 
   return (
-    <div className={css.lane}>
-      <div className={css.laneHead} style={{ opacity: audible ? 1 : 0.55 }}>
+    <div className={css.lane} style={{ "--c": LC.color } as React.CSSProperties} data-muted={!audible || undefined}>
+      <div className={css.laneHead}>
+        <span className={css.laneBar} />
         <div className={css.laneTitle}>
-          <span className={css.laneDot} style={{ background: T.color }} />
           {renaming ? (
             <input
               className={css.rename}
@@ -328,7 +331,7 @@ const LaneRow = memo(function LaneRow({
             onDoubleClick={() => st().setLane(lane.id, { gain: 0 })}
             data-tip={`Track volume ${fmtDb(lane.gain)} · double-click to reset`}
             aria-label={`${lane.label} volume`}
-            style={{ "--fill": `${((lane.gain + 24) / 30) * 100}%` } as React.CSSProperties}
+            style={{ "--fill": `${((lane.gain + 24) / 30) * 100}%`, "--fill-color": "var(--c)" } as React.CSSProperties}
           />
         </div>
       </div>
@@ -339,7 +342,7 @@ const LaneRow = memo(function LaneRow({
         style={{
           width: trackW,
           backgroundSize: `${majorPx}px 100%`,
-          backgroundColor: ghost || fileMark ? T.soft.replace(/0\.1\d\)/, "0.06)") : "transparent",
+          backgroundColor: ghost || fileMark ? LC.wash : undefined,
         }}
         onDragOver={(e) => {
           if (!e.dataTransfer.types.includes("Files")) return;
@@ -400,11 +403,11 @@ const LaneRow = memo(function LaneRow({
         {ghost && (
           <div
             className={css.ghost}
-            style={{ left: ghost.start * pps, width: Math.max(8, ghost.len * pps), borderColor: T.color, background: T.soft }}
+            style={{ left: ghost.start * pps, width: Math.max(8, ghost.len * pps) }}
           />
         )}
         {fileMark && (
-          <div className={css.ghost} style={{ left: fileMark.at * pps, width: 120, borderColor: T.color, background: T.soft }}>
+          <div className={css.ghost} style={{ left: fileMark.at * pps, width: 120 }}>
             <span className={css.ghostLabel}>Drop here</span>
           </div>
         )}
@@ -452,7 +455,6 @@ function ClipView({
   active: boolean;
   pps: number;
 }) {
-  const T = TRACK_TYPES[lane.type];
   const [hover, setHover] = useState(false);
   const w = Math.max(8, c.len * pps);
   const fi = (c.fadeIn / c.len) * 100;
@@ -545,35 +547,43 @@ function ClipView({
       style={{
         left: c.start * pps,
         width: w,
-        borderColor: selected ? "var(--fg)" : `${T.color}59`,
-        background: T.soft,
-        opacity: audible ? 1 : 0.4,
+        opacity: audible ? 1 : 0.35,
       }}
     >
-      <div className={css.clipHead}>
-        <span className={css.clipName}>{snd.name}</span>
-        {w > 150 && c.gain !== 0 && <span className={css.clipMeta}>{fmtDb(c.gain)}</span>}
-        {w > 110 && <span className={css.clipMeta}>{fmtSec(c.len)}</span>}
-      </div>
+      {w >= 40 && (
+        <div className={css.clipHead}>
+          <span className={css.clipName}>{snd.name}</span>
+          {w > 170 && c.gain !== 0 && <span className={css.clipMeta}>{fmtDb(c.gain)}</span>}
+          {w > 120 && <span className={css.clipMeta}>{fmtSec(c.len)}</span>}
+        </div>
+      )}
       <svg
         className={css.clipWave}
         viewBox={`${((c.offset / snd.dur) * 100).toFixed(3)} 0 ${((c.len / snd.dur) * 100).toFixed(3)} 40`}
         preserveAspectRatio="none"
       >
-        <path d={snd.path} fill={T.color} fillOpacity={0.85} />
+        <path d={snd.path} />
       </svg>
       <svg className={css.clipFades} viewBox="0 0 100 100" preserveAspectRatio="none">
-        <polygon points={`0,0 ${fi},0 0,100`} fill="rgba(10,10,12,0.55)" />
-        <polygon points={`100,0 ${100 - fo},0 100,100`} fill="rgba(10,10,12,0.55)" />
-        <polyline points={`0,100 ${fi},0`} fill="none" stroke="#F4F4F8" strokeOpacity={0.7} strokeWidth={1} vectorEffect="non-scaling-stroke" />
-        <polyline points={`${100 - fo},0 100,100`} fill="none" stroke="#F4F4F8" strokeOpacity={0.7} strokeWidth={1} vectorEffect="non-scaling-stroke" />
+        {fi > 0 && (
+          <>
+            <polygon points={`0,0 ${fi},0 0,100`} fill="rgba(0,0,0,0.42)" />
+            <polyline points={`0,100 ${fi},0`} fill="none" stroke="rgba(255,255,255,0.6)" strokeWidth={1} vectorEffect="non-scaling-stroke" />
+          </>
+        )}
+        {fo > 0 && (
+          <>
+            <polygon points={`100,0 ${100 - fo},0 100,100`} fill="rgba(0,0,0,0.42)" />
+            <polyline points={`${100 - fo},0 100,100`} fill="none" stroke="rgba(255,255,255,0.6)" strokeWidth={1} vectorEffect="non-scaling-stroke" />
+          </>
+        )}
       </svg>
       <div data-handle="trimL" className={`${css.trim} ${css.trimL}`} data-tip="Drag to trim the start" />
       <div data-handle="trimR" className={`${css.trim} ${css.trimR}`} data-tip="Drag to trim the end" />
       {(selected || hover) && w > 36 && (
         <>
-          <div data-handle="fadeIn" className={css.fadeKnob} style={{ left: fiX, borderColor: T.color }} data-tip="Drag to fade in" />
-          <div data-handle="fadeOut" className={css.fadeKnob} style={{ left: foX, borderColor: T.color }} data-tip="Drag to fade out" />
+          <div data-handle="fadeIn" className={css.fadeKnob} style={{ left: fiX }} data-tip="Drag to fade in" />
+          <div data-handle="fadeOut" className={css.fadeKnob} style={{ left: foX }} data-tip="Drag to fade out" />
         </>
       )}
     </div>

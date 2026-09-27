@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { TRACK_TYPES } from "@/lib/studio/constants";
+import { laneColor } from "@/lib/studio/colors";
 import { fmt, fmtDb, fmtSec, fmtShort } from "@/lib/studio/format";
 import { useStudio } from "@/lib/studio/store";
 import { Chip, Kbd, Slider, ToggleRow } from "@/components/ui/controls";
@@ -33,7 +33,7 @@ function ClipPanel() {
   const sel = s.clips.find((c) => c.id === s.selected)!;
   const snd = s.sounds.find((x) => x.id === sel.soundId)!;
   const lane = s.lanes.find((l) => l.id === sel.lane)!;
-  const T = TRACK_TYPES[lane.type];
+  const T = laneColor(lane, s.lanes);
   const fadeMax = Math.min(5, +sel.len.toFixed(2));
   const offPct = (sel.offset / snd.dur) * 100;
   const tailPct = Math.max(0, 100 - ((sel.offset + sel.len) / snd.dur) * 100);
@@ -41,23 +41,24 @@ function ClipPanel() {
   return (
     <>
       <section className={css.section}>
-        <p className="eyebrow" style={{ color: T.color }}>
-          Clip
+        <p className={css.kicker}>
+          <span className={css.kickerDot} style={{ background: T.color }} />
+          {lane.label}
         </p>
         <p className={css.title}>{snd.name}</p>
         <p className={css.sub}>
           {snd.kind} · source {fmtSec(snd.dur)}
         </p>
-        <div className={css.wave}>
+        <div className={css.wave} style={{ "--c": T.color } as React.CSSProperties}>
           <svg viewBox="0 0 100 40" preserveAspectRatio="none">
-            <path d={snd.path} fill={T.color} />
+            <path d={snd.path} />
           </svg>
           <div className={css.shade} style={{ left: 0, width: `${offPct}%` }} />
           <div className={css.shade} style={{ right: 0, width: `${tailPct}%` }} />
         </div>
       </section>
 
-      <section className={`${css.section} ${css.stack}`}>
+      <section className={`${css.section} ${css.stack}`} style={{ "--fill-color": T.color } as React.CSSProperties}>
         <div>
           <p className={css.label}>Track</p>
           <div className={css.chips} role="radiogroup" aria-label="Track">
@@ -66,7 +67,7 @@ function ClipPanel() {
                 key={l.id}
                 role="radio"
                 on={l.id === sel.lane}
-                color={TRACK_TYPES[l.type].color}
+                color={laneColor(l, s.lanes).color}
                 onClick={() => {
                   if (l.id === sel.lane) return;
                   s.commit();
@@ -169,7 +170,7 @@ function SessionPanel() {
   return (
     <>
       <section className={css.section}>
-        <p className="eyebrow">Session</p>
+        <p className={css.kicker}>Session</p>
         <p className={css.title}>{s.projectName || "Untitled session"}</p>
         <p className={css.sub}>
           {fmtShort(end)} · {clipCount} · {s.lanes.length} tracks
@@ -239,21 +240,7 @@ function SessionPanel() {
         </button>
       </section>
 
-      <section className={css.section} style={{ borderBottom: 0 }}>
-        <p className={css.group}>Tips</p>
-        <ul className={css.tips}>
-          <li>
-            Select a clip to set its gain and fades. Drag the white dots on a clip to shape fades.
-          </li>
-          <li>Right-click a clip for quick actions. Double-click a track name to rename it.</li>
-          <li>
-            Double-click an empty spot on a track to search for a sound to put there.
-          </li>
-          <li>
-            Press <Kbd>⌘K</Kbd> to search everything, or <Kbd>?</Kbd> for shortcuts.
-          </li>
-        </ul>
-      </section>
+
     </>
   );
 }

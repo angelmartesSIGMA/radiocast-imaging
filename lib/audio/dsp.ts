@@ -11,7 +11,7 @@ export function normalize(chs: Float32Array[], peak = 0.89): void {
 }
 
 /** Mirrored peak envelope as an SVG path in a 100×40 viewBox. */
-export function wavePath(ch: Float32Array, bins = 160): string {
+export function wavePath(ch: Float32Array, bins = 480): string {
   const n = ch.length;
   const step = Math.max(1, Math.floor(n / bins));
   const peaks: number[] = [];

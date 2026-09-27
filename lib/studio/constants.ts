@@ -12,20 +12,20 @@ export const TRACK_TYPES: Record<
 > = {
   voice: {
     label: "Voice",
-    color: "#A78BFA",
-    soft: "rgba(139,92,246,0.16)",
+    color: "#B794FF",
+    soft: "rgba(183,148,255,0.14)",
     hint: "Drop a voice read here, or hit record",
   },
   bed: {
     label: "Music bed",
-    color: "#34D399",
-    soft: "rgba(52,211,153,0.13)",
+    color: "#3DDBA4",
+    soft: "rgba(61,219,164,0.13)",
     hint: "Drop a music bed",
   },
   fx: {
     label: "FX",
-    color: "#FBBF24",
-    soft: "rgba(251,191,36,0.13)",
+    color: "#FFB547",
+    soft: "rgba(255,181,71,0.13)",
     hint: "Drop sweeps, hits and drops",
   },
 };
@@ -100,8 +100,8 @@ export const SHORTCUTS: [string, string][] = [
 ];
 
 export const COLORS = {
-  red: "#FF3B5C",
+  red: "#FF4D6A",
   green: "#34D399",
-  violet: "#A78BFA",
+  violet: "#C26BFF",
   amber: "#FBBF24",
 };

@@ -13,7 +13,6 @@ import { Palette } from "./Palette";
 import { SendDrawer } from "./SendDrawer";
 import { Timeline } from "./Timeline";
 import { Toolbar } from "./Toolbar";
-import { Tour } from "./Tour";
 import css from "./Studio.module.css";
 
 const hasFiles = (e: DragEvent) => Array.from(e.dataTransfer?.types ?? []).includes("Files");
@@ -27,12 +26,7 @@ export default function Studio() {
 
   useEffect(() => {
     const st = useStudio.getState;
-    void st()
-      .init()
-      .then(() => {
-        // First visit: walk through the studio once.
-        if (!st().tourDone && window.innerWidth >= 900) setTimeout(() => st().set({ tour: 0 }), 700);
-      });
+    void st().init();
 
     // transport clock
     let raf = 0;
@@ -133,7 +127,6 @@ export default function Studio() {
       <Overlays />
       <SendDrawer />
       <Palette />
-      <Tour />
       <TooltipLayer />
     </div>
   );

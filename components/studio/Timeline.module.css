@@ -3,7 +3,7 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  border-radius: 16px;
+  border-radius: 12px;
   border: 1px solid var(--line);
   background: var(--panel);
   box-shadow: var(--shadow-panel);
@@ -21,13 +21,13 @@
   min-height: 100%;
 }
 
-/* ruler */
+/* ── ruler ─────────────────────────────────────────── */
 .rulerRow {
   position: sticky;
   top: 0;
   z-index: 8;
   display: flex;
-  height: 34px;
+  height: 30px;
   border-bottom: 1px solid var(--line);
   background: var(--panel);
 }
@@ -39,48 +39,51 @@
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  padding-left: 16px;
+  padding-left: 14px;
   border-right: 1px solid var(--line);
   background: var(--panel);
-  font-family: var(--font-mono);
-  font-size: 10.4px;
-  text-transform: uppercase;
-  letter-spacing: 0.16em;
+  font-size: 11px;
+  font-weight: 500;
   color: var(--fg-3);
 }
 .ruler {
   position: relative;
   flex-shrink: 0;
-  cursor: text;
-  background-image: linear-gradient(to right, rgba(255, 255, 255, 0.1) 1px, transparent 1px);
+  cursor: col-resize;
+  background-image: linear-gradient(to right, rgba(255, 255, 255, 0.08) 1px, transparent 1px);
   background-repeat: repeat-x;
   background-position: 0 100%;
   touch-action: none;
+}
+.ruler:hover {
+  background-color: rgba(255, 255, 255, 0.015);
 }
 .tick {
   position: absolute;
   top: 0;
   bottom: 0;
-  border-left: 1px solid rgba(255, 255, 255, 0.16);
-  padding: 8px 0 0 6px;
+  border-left: 1px solid rgba(255, 255, 255, 0.12);
+  padding: 10px 0 0 5px;
   font-family: var(--font-mono);
   font-size: 10px;
+  line-height: 1;
   color: var(--fg-3);
   pointer-events: none;
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 .targetFlag {
   position: absolute;
   top: 6px;
   z-index: 1;
   transform: translateX(-100%);
-  margin-left: -4px;
+  margin-left: -5px;
   border-radius: 5px;
-  background: rgba(251, 191, 36, 0.14);
-  border: 1px solid rgba(251, 191, 36, 0.35);
-  padding: 1px 6px;
+  background: rgba(255, 181, 71, 0.14);
+  padding: 2px 6px;
   font-family: var(--font-mono);
   font-size: 10px;
+  line-height: 1.2;
   color: var(--amber);
   pointer-events: none;
 }
@@ -95,19 +98,42 @@
 }
 .head span {
   position: absolute;
-  bottom: 0;
+  bottom: -1px;
   left: -6px;
   width: 12px;
-  height: 14px;
-  border-radius: 3px 3px 6px 6px;
+  height: 12px;
   background: var(--red);
+  clip-path: polygon(0 0, 100% 0, 100% 45%, 50% 100%, 0 45%);
+  border-radius: 2px;
+}
+.hoverTag {
+  position: absolute;
+  top: 6px;
+  left: 0;
+  z-index: 2;
+  margin-left: 5px;
+  border-radius: 5px;
+  background: var(--elev);
+  padding: 2px 6px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.2;
+  color: var(--fg);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.12s;
+  white-space: nowrap;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
 }
 
-/* lanes */
+/* ── lanes ─────────────────────────────────────────── */
 .lane {
   display: flex;
-  height: 96px;
+  height: 88px;
   border-bottom: 1px solid var(--line);
+}
+.lane:nth-child(odd) .track {
+  background-color: rgba(255, 255, 255, 0.012);
 }
 .laneHead {
   position: sticky;
@@ -119,28 +145,38 @@
   flex-direction: column;
   justify-content: center;
   gap: 10px;
-  padding: 0 14px 0 16px;
+  padding: 0 14px 0 18px;
   border-right: 1px solid var(--line);
   background: var(--panel);
+}
+.laneBar {
+  position: absolute;
+  left: 0;
+  top: 10px;
+  bottom: 10px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--c);
+  transition: opacity 0.15s;
+}
+.lane[data-muted] .laneBar {
+  opacity: 0.25;
+}
+.lane[data-muted] .laneName {
+  color: var(--fg-3);
 }
 .laneTitle {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   min-width: 0;
-  height: 24px;
-}
-.laneDot {
-  width: 8px;
-  height: 8px;
-  flex-shrink: 0;
-  border-radius: 999px;
+  height: 22px;
 }
 .laneName {
   flex: 1;
   min-width: 0;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 500;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -149,24 +185,24 @@
 .rename {
   flex: 1;
   min-width: 0;
-  height: 24px;
+  height: 22px;
   border: 1px solid var(--line-3);
   border-radius: 6px;
-  background: var(--bg-sunk);
+  background: var(--bg);
   padding: 0 6px;
   margin-left: -7px;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--fg);
   outline: none;
 }
 .laneRemove {
   display: grid;
   place-items: center;
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
   border: 0;
-  border-radius: 999px;
+  border-radius: 6px;
   background: transparent;
   color: var(--fg-3);
   cursor: pointer;
@@ -178,111 +214,121 @@
   opacity: 1;
 }
 .laneRemove:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--hover);
   color: var(--fg);
 }
 .laneCtrls {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
 }
 .laneCtrls input {
   flex: 1;
   min-width: 0;
-  margin-left: 4px;
+  margin-left: 8px;
 }
 .ms {
-  height: 22px;
-  width: 26px;
+  height: 20px;
+  width: 22px;
   flex-shrink: 0;
-  border-radius: 6px;
-  border: 1px solid var(--line-2);
-  background: transparent;
-  color: var(--fg-2);
-  font-family: var(--font-mono);
+  border-radius: 5px;
+  border: 0;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--fg-3);
   font-size: 10.5px;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
+  transition: background 0.12s, color 0.12s;
 }
 .ms:hover {
+  background: rgba(255, 255, 255, 0.1);
   color: var(--fg);
-  border-color: rgba(255, 255, 255, 0.25);
 }
 .ms[data-on="mute"] {
-  background: var(--fg);
-  border-color: var(--fg);
-  color: var(--bg);
+  background: #e4e4e9;
+  color: #0a0a0c;
 }
 .ms[data-on="solo"] {
   background: var(--amber);
-  border-color: var(--amber);
-  color: var(--bg);
+  color: #0a0a0c;
 }
 
 .track {
   position: relative;
   flex-shrink: 0;
-  background-image: linear-gradient(to right, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+  background-image: linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
   transition: background-color 0.12s;
 }
 .hint {
-  gap: 6px;
   position: sticky;
   left: 208px;
   display: inline-flex;
+  gap: 6px;
   height: 100%;
   align-items: center;
-  padding-left: 20px;
+  padding-left: 18px;
   pointer-events: none;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.04em;
-  color: var(--fg-3);
+  font-size: 12px;
+  color: var(--fg-4);
   white-space: nowrap;
 }
+.hintSub {
+  color: var(--fg-4);
+}
 
-/* clips */
+/* ── clips ─────────────────────────────────────────── */
 .clip {
   position: absolute;
-  top: 8px;
-  bottom: 8px;
-  border-radius: 8px;
-  border: 1px solid;
+  top: 6px;
+  bottom: 6px;
+  border-radius: 7px;
+  border: 1px solid color-mix(in srgb, var(--c) 38%, transparent);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--c) 24%, #111114) 0%,
+    color-mix(in srgb, var(--c) 12%, #111114) 100%
+  );
   overflow: hidden;
   cursor: grab;
   touch-action: none;
   user-select: none;
   z-index: 1;
   outline: none;
-  transition: box-shadow 0.12s;
+  transition: box-shadow 0.12s, filter 0.12s, border-color 0.12s;
+}
+.clip:hover:not([data-active]) {
+  border-color: color-mix(in srgb, var(--c) 60%, transparent);
 }
 .clip[data-selected] {
   z-index: 2;
-  box-shadow: 0 0 0 1px var(--fg);
+  border-color: #fff;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--c) 30%, transparent);
 }
 .clip[data-active] {
   z-index: 3;
   cursor: grabbing;
-  box-shadow: 0 16px 32px -12px rgba(0, 0, 0, 0.9), 0 0 0 1px var(--fg);
+  border-color: #fff;
+  box-shadow: 0 14px 28px -10px rgba(0, 0, 0, 0.9), 0 0 0 3px color-mix(in srgb, var(--c) 30%, transparent);
+}
+.clip[data-live="1"] {
+  filter: brightness(1.2) saturate(1.1);
 }
 .clipHead {
   position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
   gap: 6px;
   height: 20px;
-  padding: 0 8px;
-  background: rgba(255, 255, 255, 0.03);
+  padding: 0 7px;
   pointer-events: none;
-}
-.clip[data-selected] .clipHead {
-  background: rgba(255, 255, 255, 0.08);
 }
 .clipName {
   flex: 1;
   min-width: 0;
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 500;
+  color: color-mix(in srgb, var(--c) 25%, #fff);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -290,7 +336,7 @@
 .clipMeta {
   font-family: var(--font-mono);
   font-size: 9.5px;
-  color: rgba(244, 244, 248, 0.6);
+  color: color-mix(in srgb, var(--c) 30%, rgba(255, 255, 255, 0.5));
   white-space: nowrap;
 }
 .clipWave {
@@ -298,8 +344,12 @@
   left: 0;
   top: 22px;
   width: 100%;
-  height: calc(100% - 26px);
+  height: calc(100% - 28px);
   pointer-events: none;
+}
+.clipWave path {
+  fill: var(--c);
+  opacity: 0.9;
 }
 .clipFades {
   position: absolute;
@@ -312,11 +362,34 @@
   position: absolute;
   top: 0;
   bottom: 0;
-  width: 7px;
+  width: 8px;
+  z-index: 2;
   cursor: ew-resize;
 }
-.trim:hover {
-  background: rgba(255, 255, 255, 0.18);
+.trim::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  width: 3px;
+  height: 18px;
+  margin-top: -9px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.85);
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.trimL::after {
+  left: 2px;
+}
+.trimR::after {
+  right: 2px;
+}
+.clip:hover .trim::after,
+.clip[data-selected] .trim::after {
+  opacity: 0.55;
+}
+.trim:hover::after {
+  opacity: 1 !important;
 }
 .trimL {
   left: 0;
@@ -326,23 +399,28 @@
 }
 .fadeKnob {
   position: absolute;
-  top: 4px;
-  width: 12px;
-  height: 12px;
-  margin-left: -6px;
+  top: 21px;
+  z-index: 3;
+  width: 10px;
+  height: 10px;
+  margin-left: -5px;
   border-radius: 999px;
   background: #fff;
-  border: 2px solid;
+  box-shadow: 0 0 0 2px var(--c), 0 1px 3px rgba(0, 0, 0, 0.6);
   cursor: ew-resize;
-  z-index: 1;
+  transition: transform 0.1s;
+}
+.fadeKnob:hover {
+  transform: scale(1.25);
 }
 
 .ghost {
   position: absolute;
-  top: 8px;
-  bottom: 8px;
-  border-radius: 8px;
-  border: 1.5px dashed;
+  top: 6px;
+  bottom: 6px;
+  border-radius: 7px;
+  border: 1.5px dashed var(--c);
+  background: color-mix(in srgb, var(--c) 14%, transparent);
   pointer-events: none;
   z-index: 4;
   display: flex;
@@ -350,16 +428,16 @@
   justify-content: center;
 }
 .ghostLabel {
-  font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: 11px;
+  font-weight: 500;
 }
 .recBlock {
   position: absolute;
-  top: 8px;
-  bottom: 8px;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 59, 92, 0.5);
-  background: var(--red-soft);
+  top: 6px;
+  bottom: 6px;
+  border-radius: 7px;
+  border: 1px solid rgba(255, 77, 106, 0.5);
+  background: linear-gradient(180deg, rgba(255, 77, 106, 0.2), rgba(255, 77, 106, 0.08));
   pointer-events: none;
   z-index: 4;
   padding: 4px 8px;
@@ -371,23 +449,24 @@
 }
 .tag {
   position: absolute;
-  top: -13px;
+  top: -11px;
   z-index: 9;
   pointer-events: none;
-  border-radius: 6px;
-  background: var(--fg);
-  padding: 2px 7px;
+  border-radius: 5px;
+  background: #fff;
+  padding: 2px 6px;
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: 10px;
   font-weight: 500;
-  color: var(--bg);
+  color: #0a0a0c;
   white-space: nowrap;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
 }
 
-/* add row */
+/* ── add-track row ─────────────────────────────────── */
 .addRow {
   display: flex;
-  height: 52px;
+  height: 48px;
 }
 .addCell {
   position: sticky;
@@ -397,7 +476,7 @@
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
   padding: 0 10px;
   border-right: 1px solid var(--line);
   background: var(--panel);
@@ -406,14 +485,14 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  height: 28px;
+  height: 26px;
   border: 0;
-  border-radius: 999px;
+  border-radius: 7px;
   background: transparent;
   padding: 0 8px;
   font-size: 12px;
   font-weight: 500;
-  color: var(--fg-2);
+  color: var(--fg-3);
   cursor: pointer;
   white-space: nowrap;
 }
@@ -422,10 +501,10 @@
   color: var(--fg);
 }
 
-/* overlays */
+/* ── overlays ──────────────────────────────────────── */
 .overlay {
   position: absolute;
-  top: 34px;
+  top: 30px;
   bottom: 0;
   left: 0;
   right: 0;
@@ -437,11 +516,7 @@
   top: 0;
   bottom: 0;
   right: 0;
-  background: repeating-linear-gradient(
-    -45deg,
-    rgba(251, 191, 36, 0.035) 0 6px,
-    transparent 6px 12px
-  );
+  background: repeating-linear-gradient(-45deg, rgba(255, 181, 71, 0.03) 0 1px, transparent 1px 8px);
 }
 .targetLine {
   position: absolute;
@@ -449,74 +524,7 @@
   bottom: 0;
   left: 0;
   width: 0;
-  border-left: 1px dashed rgba(251, 191, 36, 0.6);
-}
-.playhead {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  width: 2px;
-  margin-left: -1px;
-  background: var(--red);
-  will-change: transform;
-}
-.snapLine {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 1px;
-  background: var(--violet);
-}
-
-.emptyState {
-  position: absolute;
-  left: calc(208px + 40px);
-  top: 50%;
-  z-index: 7;
-  transform: translateY(-50%);
-  width: min(420px, calc(100% - 208px - 80px));
-  border-radius: 16px;
-  border: 1px solid var(--line-2);
-  background: rgba(23, 23, 27, 0.92);
-  backdrop-filter: blur(8px);
-  padding: 20px;
-  box-shadow: var(--shadow-pop);
-}
-.emptyTitle {
-  margin: 8px 0 0;
-  font-size: 16px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-}
-.emptySub {
-  margin: 6px 0 0;
-  font-size: 13px;
-  line-height: 1.55;
-  color: var(--fg-2);
-}
-.emptySub b {
-  font-family: var(--font-mono);
-  font-weight: 500;
-  color: var(--fg);
-}
-.emptyBtn {
-  margin-top: 14px;
-  border: 0;
-  border-radius: 999px;
-  background: #fff;
-  padding: 8px 16px;
-  font-size: 13px;
-  font-weight: 600;
-  color: #000;
-  cursor: pointer;
-}
-
-.clip[data-live="1"] {
-  filter: brightness(1.25) saturate(1.15);
-}
-.clip:hover:not([data-active]) {
-  filter: brightness(1.1);
+  border-left: 1px dashed rgba(255, 181, 71, 0.5);
 }
 .hoverLine {
   position: absolute;
@@ -524,30 +532,61 @@
   bottom: 0;
   left: 0;
   width: 1px;
-  background: rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.14);
   opacity: 0;
   transition: opacity 0.12s;
   will-change: transform;
 }
-.hoverTag {
+.playhead {
   position: absolute;
-  top: 7px;
+  top: 0;
+  bottom: 0;
   left: 0;
-  z-index: 2;
-  margin-left: 4px;
-  border-radius: 5px;
-  background: rgba(255, 255, 255, 0.1);
-  padding: 1px 6px;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  color: var(--fg);
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 0.12s;
-  white-space: nowrap;
+  width: 1.5px;
+  margin-left: -0.75px;
+  background: var(--red);
+  box-shadow: 0 0 8px rgba(255, 77, 106, 0.45);
+  will-change: transform;
 }
-.hintSub {
-  color: rgba(95, 95, 105, 0.75);
+.snapLine {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--accent);
+  box-shadow: 0 0 6px var(--accent);
+}
+
+/* ── empty state ───────────────────────────────────── */
+.emptyState {
+  position: absolute;
+  left: calc(208px + 40px);
+  top: 50%;
+  z-index: 7;
+  transform: translateY(-50%);
+  width: min(440px, calc(100% - 208px - 80px));
+  border-radius: 14px;
+  border: 1px solid var(--line-2);
+  background: rgba(26, 26, 31, 0.94);
+  backdrop-filter: blur(10px);
+  padding: 20px;
+  box-shadow: var(--shadow-pop);
+}
+.emptyTitle {
+  margin: 6px 0 0;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+.emptySub {
+  margin: 14px 0 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--fg-3);
+}
+.emptySub b {
+  font-weight: 500;
+  color: var(--fg-2);
 }
 .tplGrid {
   display: grid;
@@ -559,26 +598,25 @@
   display: flex;
   flex-direction: column;
   gap: 3px;
-  border-radius: 12px;
+  border-radius: 10px;
   border: 1px solid var(--line-2);
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(255, 255, 255, 0.02);
   padding: 10px 12px;
   text-align: left;
   color: inherit;
   cursor: pointer;
-  transition: border-color 0.12s, background 0.12s, transform 0.12s;
+  transition: border-color 0.12s, background 0.12s;
 }
 .tpl:hover {
-  border-color: var(--violet);
-  background: rgba(139, 92, 246, 0.08);
-  transform: translateY(-1px);
+  border-color: var(--line-3);
+  background: rgba(255, 255, 255, 0.05);
 }
 .tplName {
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 500;
 }
 .tplBlurb {
   font-size: 11.5px;
   line-height: 1.4;
-  color: var(--fg-2);
+  color: var(--fg-3);
 }

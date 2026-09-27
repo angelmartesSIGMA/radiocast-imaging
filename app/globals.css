@@ -1,27 +1,44 @@
 :root {
-  --bg: #0a0a0c;
-  --bg-sunk: #0d0d10;
+  /* surfaces, darkest → lightest */
+  --bg: #09090b;
+  --bg-sunk: #0c0c0f;
   --panel: #111114;
-  --raised: #17171b;
-  --fg: #f4f4f8;
-  --fg-2: #9c9ca6;
-  --fg-3: #5f5f69;
-  --line: rgba(255, 255, 255, 0.07);
-  --line-2: rgba(255, 255, 255, 0.12);
-  --line-3: rgba(255, 255, 255, 0.3);
+  --panel-2: #141418;
+  --raised: #1a1a1f;
+  --elev: #202026;
+
+  /* text */
+  --fg: #ededf0;
+  --fg-2: #a1a1aa;
+  --fg-3: #63636d;
+  --fg-4: #45454d;
+
+  /* lines */
+  --line: rgba(255, 255, 255, 0.06);
+  --line-2: rgba(255, 255, 255, 0.1);
+  --line-3: rgba(255, 255, 255, 0.22);
   --hover: rgba(255, 255, 255, 0.05);
+  --active: rgba(255, 255, 255, 0.08);
+
+  /* brand + status (brand accent is pulled from the logo's magenta) */
+  --accent: #c26bff;
+  --accent-2: #a78bfa;
+  --accent-soft: rgba(194, 107, 255, 0.14);
   --violet: #a78bfa;
-  --violet-strong: #8b5cf6;
-  --violet-soft: rgba(139, 92, 246, 0.14);
+  --violet-strong: #9d5cff;
+  --violet-soft: rgba(157, 92, 255, 0.14);
   --green: #34d399;
   --amber: #fbbf24;
-  --red: #ff3b5c;
-  --red-soft: rgba(255, 59, 92, 0.14);
-  --radius: 12px;
-  --shadow-pop: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 40px 80px -30px rgba(0, 0, 0, 0.9);
-  --shadow-panel: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 20px 40px -28px rgba(0, 0, 0, 0.8);
-  --font-sans: var(--font-inter), system-ui, sans-serif;
-  --font-mono: var(--font-jetbrains), ui-monospace, monospace;
+  --red: #ff4d6a;
+  --red-soft: rgba(255, 77, 106, 0.13);
+
+  --radius-sm: 8px;
+  --radius: 10px;
+  --radius-lg: 14px;
+  --shadow-pop: 0 0 0 1px rgba(255, 255, 255, 0.06), 0 24px 60px -20px rgba(0, 0, 0, 0.85), 0 8px 20px -8px rgba(0, 0, 0, 0.6);
+  --shadow-panel: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 12px 32px -20px rgba(0, 0, 0, 0.9);
+  --font-sans-stack: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-mono-face), ui-monospace, "SF Mono", monospace;
   color-scheme: dark;
 }
 
@@ -35,8 +52,9 @@ body {
   height: 100%;
   background: var(--bg);
   color: var(--fg);
-  font-family: var(--font-sans);
-  font-feature-settings: "cv11", "ss01";
+  font-family: var(--font-sans-stack);
+  font-size: 13px;
+  letter-spacing: -0.005em;
   -webkit-font-smoothing: antialiased;
   overflow: hidden;
 }
@@ -50,12 +68,12 @@ a:hover {
 }
 
 ::selection {
-  background: rgba(139, 92, 246, 0.35);
+  background: rgba(194, 107, 255, 0.35);
   color: #fff;
 }
 
 :focus-visible {
-  outline: 2px solid rgba(167, 139, 250, 0.7);
+  outline: 2px solid rgba(194, 107, 255, 0.65);
   outline-offset: 2px;
 }
 
@@ -77,33 +95,34 @@ button:disabled {
 input[type="range"] {
   -webkit-appearance: none;
   appearance: none;
-  height: 4px;
+  height: 3px;
   border-radius: 999px;
   cursor: pointer;
   margin: 0;
   background: linear-gradient(
     to right,
-    var(--violet) 0%,
-    var(--violet) var(--fill, 0%),
-    rgba(255, 255, 255, 0.12) var(--fill, 0%)
+    var(--fill-color, rgba(255, 255, 255, 0.55)) 0%,
+    var(--fill-color, rgba(255, 255, 255, 0.55)) var(--fill, 0%),
+    rgba(255, 255, 255, 0.1) var(--fill, 0%)
   );
 }
 input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 12px;
-  height: 12px;
+  width: 11px;
+  height: 11px;
   border-radius: 999px;
   background: #fff;
-  box-shadow: 0 0 0 4px rgba(139, 92, 246, 0.25);
-  transition: box-shadow 0.15s;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+  transition: transform 0.12s, box-shadow 0.12s;
 }
 input[type="range"]:hover::-webkit-slider-thumb,
 input[type="range"]:focus-visible::-webkit-slider-thumb {
-  box-shadow: 0 0 0 6px rgba(139, 92, 246, 0.35);
+  transform: scale(1.2);
+  box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.1), 0 1px 3px rgba(0, 0, 0, 0.6);
 }
 input[type="range"]::-moz-range-thumb {
-  width: 12px;
-  height: 12px;
+  width: 11px;
+  height: 11px;
   border: 0;
   border-radius: 999px;
   background: #fff;
@@ -132,12 +151,10 @@ input[type="range"]::-moz-range-thumb {
 
 .eyebrow {
   margin: 0;
-  font-family: var(--font-mono);
-  font-size: 10.4px;
+  font-size: 11px;
   font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.18em;
-  color: var(--violet);
+  letter-spacing: 0.01em;
+  color: var(--fg-3);
 }
 
 .sr-only {
