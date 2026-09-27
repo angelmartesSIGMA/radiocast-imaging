@@ -1,0 +1,643 @@
+"use client";
+
+import { create } from "zustand";
+import { persist } from "zustand/middleware";
+import { encodeWav, bufferPeak, wavePath } from "@/lib/audio/dsp";
+import { getEngine } from "@/lib/audio/engine";
+import { clock, dom } from "./clock";
+import { COLORS, HEADER_W, SCALES, TRACK_TYPES, VOICES } from "./constants";
+import { clamp, dbToGain, fmt } from "./format";
+import type { Clip, Lane, LibraryFilter, MixSnapshot, Sound, TrackType } from "./types";
+
+type Snapshot = { clips: Clip[]; lanes: Lane[] };
+
+export interface LibDrag {
+  soundId: string;
+  name: string;
+  type: TrackType;
+  x: number;
+  y: number;
+}
+export interface Ghost {
+  lane: string;
+  start: number;
+  len: number;
+}
+export interface ContextMenu {
+  clipId: string;
+  x: number;
+  y: number;
+}
+
+export interface StudioState {
+  // document
+  sounds: Sound[];
+  clips: Clip[];
+  lanes: Lane[];
+  projectName: string;
+  master: number;
+  duck: boolean;
+  duckDb: number;
+  limiter: boolean;
+  target: number | null;
+  past: Snapshot[];
+  future: Snapshot[];
+
+  // transport
+  ready: boolean;
+  playing: boolean;
+  recording: boolean;
+  recAt: number;
+  recLane: string | null;
+  loop: boolean;
+  previewId: string | null;
+  exporting: boolean;
+
+  // view
+  pps: number;
+  viewW: number;
+  vw: number;
+  libOpen: boolean;
+  inspOpen: boolean;
+  snapOn: boolean;
+  filter: LibraryFilter;
+  search: string;
+  selected: string | null;
+
+  // interaction
+  drag: LibDrag | null;
+  ghost: Ghost | null;
+  snapT: number | null;
+  tag: string | null;
+  activeClip: string | null;
+  fileDrag: boolean;
+  fileMark: { lane: string; at: number } | null;
+  libHover: boolean;
+  menu: ContextMenu | null;
+  renaming: string | null;
+
+  // overlays
+  toast: { msg: string; color: string; id: number } | null;
+  drawer: boolean;
+  shortcuts: boolean;
+
+  // brief
+  sent: boolean;
+  station: string;
+  email: string;
+  notes: string;
+  voice: string;
+  deliverables: string[];
+  turnaround: string;
+}
+
+interface Actions {
+  init(demo?: boolean): void;
+  set: (patch: Partial<StudioState>) => void;
+  toastMsg(msg: string, color?: string): void;
+
+  commit(): void;
+  undo(): void;
+  redo(): void;
+
+  mix(): MixSnapshot;
+  sessionEnd(clips?: Clip[]): number;
+  total(): number;
+  scale(): [number, number];
+
+  play(force?: boolean): void;
+  stop(): void;
+  togglePlay(): void;
+  seek(t: number): void;
+  tick(): void;
+  restartIfPlaying(): void;
+  preview(id: string): void;
+  stopPreview(): void;
+
+  snapTime(t: number, len: number, exclude: string | null): { t: number; snapT: number | null };
+  addClip(soundId: string, lane?: string | null, start?: number): void;
+  removeClip(id: string): void;
+  updateClip(id: string, patch: Partial<Clip>, restart?: boolean): void;
+  duplicate(id?: string | null): void;
+  split(): void;
+
+  addLane(type: TrackType): void;
+  setLane(id: string, patch: Partial<Lane>, restart?: boolean): void;
+  removeLane(id: string): void;
+
+  zoomBy(k: number, clientX?: number): void;
+  zoomFit(): void;
+
+  importFiles(files: File[], target: { lane: string; at: number } | "library" | null): Promise<void>;
+  toggleRecord(): Promise<void>;
+  exportWav(): Promise<void>;
+}
+
+export type Studio = StudioState & Actions;
+
+let nid = 1;
+const uid = (p: string) => `${p}${nid++}`;
+let toastTimer: ReturnType<typeof setTimeout> | undefined;
+let recorder: MediaRecorder | null = null;
+let takes = 0;
+
+const initialW = typeof window === "undefined" ? 1440 : window.innerWidth;
+
+export const useStudio = create<Studio>()(
+  persist(
+    (set, get) => ({
+      sounds: [],
+      clips: [],
+      lanes: [
+        { id: "L1", type: "voice", label: "Voice", gain: 0, mute: false, solo: false },
+        { id: "L2", type: "bed", label: "Music bed", gain: 0, mute: false, solo: false },
+        { id: "L3", type: "fx", label: "FX", gain: 0, mute: false, solo: false },
+        { id: "L4", type: "fx", label: "FX 2", gain: 0, mute: false, solo: false },
+      ],
+      projectName: "Station ID — Summer",
+      master: 0,
+      duck: true,
+      duckDb: -12,
+      limiter: true,
+      target: 20,
+      past: [],
+      future: [],
+
+      ready: false,
+      playing: false,
+      recording: false,
+      recAt: 0,
+      recLane: null,
+      loop: false,
+      previewId: null,
+      exporting: false,
+
+      pps: 40,
+      viewW: 900,
+      vw: initialW,
+      libOpen: initialW >= 1200,
+      inspOpen: initialW >= 1024,
+      snapOn: true,
+      filter: "all",
+      search: "",
+      selected: null,
+
+      drag: null,
+      ghost: null,
+      snapT: null,
+      tag: null,
+      activeClip: null,
+      fileDrag: false,
+      fileMark: null,
+      libHover: false,
+      menu: null,
+      renaming: null,
+
+      toast: null,
+      drawer: false,
+      shortcuts: false,
+
+      sent: false,
+      station: "",
+      email: "",
+      notes: "",
+      voice: VOICES[0],
+      deliverables: ["Station ID"],
+      turnaround: "standard",
+
+      // ───────────────────────────── basics
+      set: (patch) => set(patch),
+
+      init(demo = true) {
+        if (get().ready) return;
+        const engine = getEngine();
+        const sounds = engine.buildLibrary();
+        const mk = (soundId: string, lane: string, start: number, gain = 0, fadeIn = 0, fadeOut = 0): Clip => {
+          const s = sounds.find((x) => x.id === soundId)!;
+          return { id: uid("c"), soundId, lane, start, offset: 0, len: s.dur, gain, fadeIn, fadeOut };
+        };
+        const clips = demo
+          ? [
+              mk("pulse", "L2", 2.4, -6, 0.3, 1.5),
+              mk("riser", "L3", 0, -3),
+              mk("impact", "L3", 2.4),
+              mk("subdrop", "L4", 2.4, -4),
+              mk("zap", "L4", 9.6, -6),
+              mk("whoosh", "L3", 16.4, -4),
+              mk("chime", "L4", 17.2, -2, 0, 0.3),
+            ]
+          : [];
+        set({ sounds, clips, ready: true });
+      },
+
+      toastMsg(msg, color = COLORS.violet) {
+        clearTimeout(toastTimer);
+        set({ toast: { msg, color, id: Date.now() } });
+        toastTimer = setTimeout(() => set({ toast: null }), 2800);
+      },
+
+      // ───────────────────────────── history
+      commit() {
+        const { clips, lanes, past } = get();
+        set({ past: [...past.slice(-119), { clips, lanes }], future: [] });
+      },
+      undo() {
+        const { past, future, clips, lanes, selected } = get();
+        const h = past[past.length - 1];
+        if (!h) return;
+        set({
+          past: past.slice(0, -1),
+          future: [...future, { clips, lanes }],
+          clips: h.clips,
+          lanes: h.lanes,
+          selected: h.clips.some((c) => c.id === selected) ? selected : null,
+        });
+        get().restartIfPlaying();
+      },
+      redo() {
+        const { past, future, clips, lanes } = get();
+        const h = future[future.length - 1];
+        if (!h) return;
+        set({ future: future.slice(0, -1), past: [...past, { clips, lanes }], clips: h.clips, lanes: h.lanes });
+        get().restartIfPlaying();
+      },
+
+      // ───────────────────────────── derived
+      mix() {
+        const { clips, lanes, duck, duckDb, master, limiter } = get();
+        return { clips, lanes, duck, duckDb, master, limiter };
+      },
+      sessionEnd(clips = get().clips) {
+        let e = 0;
+        for (const c of clips) e = Math.max(e, c.start + c.len);
+        return e;
+      },
+      total() {
+        const { pps, viewW, target } = get();
+        return Math.max(get().sessionEnd() + 12, (target ?? 0) + 8, (viewW - HEADER_W) / pps, 20);
+      },
+      scale() {
+        const pps = get().pps;
+        return SCALES.find((s) => s[0] * pps >= 72) ?? SCALES[SCALES.length - 1];
+      },
+
+      // ───────────────────────────── transport
+      play(force) {
+        const s = get();
+        const end = s.sessionEnd();
+        if (!end && !force) {
+          s.toastMsg("Drag a sound onto a track first");
+          return;
+        }
+        if (!force && clock.t >= end - 0.05) clock.set(0);
+        getEngine().start(s.mix(), clock.t);
+        set({ playing: true, previewId: null });
+      },
+      stop() {
+        getEngine().stop();
+        set({ playing: false });
+      },
+      togglePlay() {
+        const s = get();
+        if (s.recording) {
+          recorder?.stop();
+          return;
+        }
+        if (s.playing) s.stop();
+        else s.play();
+      },
+      seek(t) {
+        clock.set(Math.max(0, t));
+        get().restartIfPlaying();
+      },
+      restartIfPlaying() {
+        const s = get();
+        if (s.playing && !s.recording) getEngine().start(s.mix(), clock.t);
+      },
+      tick() {
+        const s = get();
+        if (!s.playing) return;
+        const engine = getEngine();
+        const t = engine.position();
+        const end = s.sessionEnd();
+        const loopEnd = s.target ?? end;
+        if (s.loop && !s.recording && loopEnd > 0 && t >= loopEnd) {
+          clock.set(0);
+          engine.start(s.mix(), 0);
+          return;
+        }
+        clock.set(t);
+        if (!s.recording && t >= end + 0.15) s.stop();
+      },
+      preview(id) {
+        const s = get();
+        const engine = getEngine();
+        if (s.previewId === id) {
+          s.stopPreview();
+          return;
+        }
+        if (s.playing) s.stop();
+        engine.preview(id, () => set({ previewId: null }));
+        set({ previewId: id });
+      },
+      stopPreview() {
+        getEngine().stopPreview();
+        if (get().previewId) set({ previewId: null });
+      },
+
+      // ───────────────────────────── editing
+      snapTime(t, len, exclude) {
+        const s = get();
+        const th = 9 / s.pps;
+        let best: { d: number; t: number; s: number } | null = null;
+        const cands = [0, clock.t];
+        if (s.target) cands.push(s.target);
+        for (const c of s.clips) if (c.id !== exclude) cands.push(c.start, c.start + c.len);
+        for (const c of cands) {
+          const d1 = Math.abs(t - c);
+          if (d1 < th && (!best || d1 < best.d)) best = { d: d1, t: c, s: c };
+          if (len) {
+            const d2 = Math.abs(t + len - c);
+            if (d2 < th && (!best || d2 < best.d)) best = { d: d2, t: c - len, s: c };
+          }
+        }
+        if (s.snapOn && best) return { t: Math.max(0, best.t), snapT: best.s };
+        if (s.snapOn) {
+          const q = s.scale()[1];
+          return { t: Math.max(0, Math.round(t / q) * q), snapT: null };
+        }
+        return { t: Math.max(0, t), snapT: null };
+      },
+
+      addClip(soundId, lane, start) {
+        const s = get();
+        const snd = s.sounds.find((x) => x.id === soundId);
+        if (!snd) return;
+        const l =
+          s.lanes.find((x) => x.id === lane) ??
+          s.lanes.find((x) => x.type === snd.type) ??
+          s.lanes[0];
+        const bed = l.type === "bed";
+        const c: Clip = {
+          id: uid("c"),
+          soundId,
+          lane: l.id,
+          start: Math.max(0, start ?? clock.t),
+          offset: 0,
+          len: snd.dur,
+          gain: bed ? -6 : 0,
+          fadeIn: 0,
+          fadeOut: bed ? Math.min(1, snd.dur / 4) : 0,
+        };
+        s.commit();
+        set({ clips: [...get().clips, c], selected: c.id });
+        get().restartIfPlaying();
+      },
+      removeClip(id) {
+        get().commit();
+        set((st) => ({ clips: st.clips.filter((c) => c.id !== id), selected: st.selected === id ? null : st.selected, menu: null }));
+        get().restartIfPlaying();
+      },
+      updateClip(id, patch, restart = true) {
+        set((st) => ({ clips: st.clips.map((c) => (c.id === id ? { ...c, ...patch } : c)) }));
+        if (restart) get().restartIfPlaying();
+      },
+      duplicate(id) {
+        const s = get();
+        const c = s.clips.find((x) => x.id === (id ?? s.selected));
+        if (!c) return;
+        const n = { ...c, id: uid("c"), start: c.start + c.len };
+        s.commit();
+        set((st) => ({ clips: [...st.clips, n], selected: n.id, menu: null }));
+        get().restartIfPlaying();
+      },
+      split() {
+        const s = get();
+        const t = clock.t;
+        const hit = (c: Clip) => t > c.start + 0.05 && t < c.start + c.len - 0.05;
+        let targets = s.clips.filter((c) => c.id === s.selected && hit(c));
+        if (!targets.length) targets = s.clips.filter(hit);
+        if (!targets.length) {
+          s.toastMsg("Move the playhead over a clip to split it");
+          return;
+        }
+        s.commit();
+        const ids = new Set(targets.map((c) => c.id));
+        const next: Clip[] = [];
+        for (const c of s.clips) {
+          if (!ids.has(c.id)) {
+            next.push(c);
+            continue;
+          }
+          const a = t - c.start;
+          next.push(
+            { ...c, len: a, fadeOut: 0, fadeIn: Math.min(c.fadeIn, a) },
+            { ...c, id: uid("c"), start: t, offset: c.offset + a, len: c.len - a, fadeIn: 0, fadeOut: Math.min(c.fadeOut, c.len - a) },
+          );
+        }
+        set({ clips: next, menu: null });
+        get().restartIfPlaying();
+        s.toastMsg(`Split ${targets.length} clip${targets.length > 1 ? "s" : ""} at ${fmt(t)}`);
+      },
+
+      addLane(type) {
+        const s = get();
+        const n = s.lanes.filter((l) => l.type === type).length;
+        const l: Lane = {
+          id: uid("L"),
+          type,
+          label: n ? `${TRACK_TYPES[type].label} ${n + 1}` : TRACK_TYPES[type].label,
+          gain: 0,
+          mute: false,
+          solo: false,
+        };
+        s.commit();
+        set({ lanes: [...get().lanes, l] });
+      },
+      setLane(id, patch, restart = true) {
+        set((st) => ({ lanes: st.lanes.map((l) => (l.id === id ? { ...l, ...patch } : l)) }));
+        if (restart) get().restartIfPlaying();
+      },
+      removeLane(id) {
+        get().commit();
+        set((st) => ({ lanes: st.lanes.filter((l) => l.id !== id), clips: st.clips.filter((c) => c.lane !== id) }));
+        get().restartIfPlaying();
+      },
+
+      // ───────────────────────────── view
+      zoomBy(k, clientX) {
+        const sc = dom.scroll;
+        const old = get().pps;
+        const pps = clamp(old * k, 6, 600);
+        let t = clock.t;
+        let px: number | null = null;
+        if (sc && clientX != null) {
+          const r = sc.getBoundingClientRect();
+          px = clientX - r.left;
+          t = (sc.scrollLeft + px - HEADER_W) / old;
+        }
+        set({ pps });
+        requestAnimationFrame(() => {
+          if (!sc) return;
+          const ax = px ?? sc.clientWidth / 2;
+          sc.scrollLeft = Math.max(0, HEADER_W + t * pps - ax);
+          clock.set(clock.t);
+        });
+      },
+      zoomFit() {
+        const s = get();
+        const end = Math.max(8, s.sessionEnd() + 1, (s.target ?? 0) + 1);
+        set({ pps: Math.max(6, (s.viewW - HEADER_W - 40) / end) });
+        requestAnimationFrame(() => {
+          if (dom.scroll) dom.scroll.scrollLeft = 0;
+          clock.set(clock.t);
+        });
+      },
+
+      // ───────────────────────────── files & recording
+      async importFiles(files, target) {
+        const s = get();
+        const audio = files.filter(
+          (f) => (f.type || "").startsWith("audio/") || /\.(wav|mp3|aiff?|m4a|ogg|flac|aac)$/i.test(f.name),
+        );
+        if (!audio.length) {
+          if (files.length) s.toastMsg("Those don’t look like audio files", COLORS.red);
+          return;
+        }
+        let at = target && target !== "library" ? target.at : clock.t;
+        for (const f of audio) {
+          try {
+            const buf = await getEngine().decode(await f.arrayBuffer());
+            const laneObj = target && target !== "library" ? get().lanes.find((l) => l.id === target.lane) : undefined;
+            const type: TrackType = laneObj ? laneObj.type : buf.duration > 10 ? "bed" : "voice";
+            const lane =
+              target === "library" ? null : laneObj ? laneObj.id : get().lanes.find((l) => l.type === type)?.id ?? null;
+            addUserSound(buf, f.name.replace(/\.[^.]+$/, ""), "Upload", type, lane, at);
+            at += buf.duration;
+          } catch {
+            get().toastMsg(`Couldn’t read ${f.name}`, COLORS.red);
+          }
+        }
+      },
+
+      async toggleRecord() {
+        const s = get();
+        if (s.recording) {
+          recorder?.stop();
+          return;
+        }
+        if (typeof MediaRecorder === "undefined" || !navigator.mediaDevices) {
+          s.toastMsg("Recording isn’t supported in this browser", COLORS.red);
+          return;
+        }
+        const selC = s.clips.find((c) => c.id === s.selected);
+        const selL = selC && s.lanes.find((l) => l.id === selC.lane);
+        const lane = selL?.type === "voice" ? selL.id : s.lanes.find((l) => l.type === "voice")?.id;
+        if (!lane) {
+          s.toastMsg("Add a voice track to record onto", COLORS.red);
+          return;
+        }
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          const chunks: Blob[] = [];
+          const rec = new MediaRecorder(stream);
+          recorder = rec;
+          if (get().playing) get().stop();
+          const recAt = clock.t;
+          rec.ondataavailable = (e) => {
+            if (e.data.size) chunks.push(e.data);
+          };
+          rec.onstop = async () => {
+            stream.getTracks().forEach((t) => t.stop());
+            getEngine().stop();
+            set({ recording: false, playing: false, recLane: null });
+            recorder = null;
+            try {
+              const buf = await getEngine().decode(await new Blob(chunks).arrayBuffer());
+              takes += 1;
+              addUserSound(buf, `Take ${takes}`, "Mic", "voice", lane, recAt);
+            } catch {
+              get().toastMsg("That take couldn’t be saved", COLORS.red);
+            }
+          };
+          rec.start();
+          set({ recording: true, recAt, recLane: lane });
+          get().play(true);
+        } catch {
+          get().toastMsg("Microphone access was blocked", COLORS.red);
+        }
+      },
+
+      async exportWav() {
+        const s = get();
+        const end = s.sessionEnd();
+        if (!end) {
+          s.toastMsg("Nothing to export yet");
+          return;
+        }
+        if (s.exporting) return;
+        set({ exporting: true });
+        try {
+          const buf = await getEngine().render(s.mix(), end);
+          let peak = bufferPeak(buf);
+          // Output ceiling: the Web Audio compressor has no lookahead, so trim any overshoot.
+          const ceiling = dbToGain(-0.3);
+          if (s.limiter && peak > ceiling) {
+            const k = ceiling / peak;
+            for (let c = 0; c < buf.numberOfChannels; c++) {
+              const d = buf.getChannelData(c);
+              for (let i = 0; i < d.length; i++) d[i] *= k;
+            }
+            peak = ceiling;
+          }
+          const a = document.createElement("a");
+          a.href = URL.createObjectURL(encodeWav(buf));
+          a.download = `${(s.projectName || "imaging").replace(/[^\w\- ]+/g, "").replace(/\s+/g, " ").trim() || "imaging"}.wav`;
+          a.click();
+          setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+          const peakDb = 20 * Math.log10(peak || 1e-6);
+          if (peak > 1) get().toastMsg(
+              `Exported, but it clips (${peakDb.toFixed(1)} dBFS) — ${s.limiter ? "lower the master" : "turn on the limiter"}`,
+              COLORS.amber,
+            );
+          else get().toastMsg(`Exported WAV · 44.1 kHz stereo · peak ${peakDb.toFixed(1)} dBFS`, COLORS.green);
+        } catch {
+          get().toastMsg("Export failed", COLORS.red);
+        }
+        set({ exporting: false });
+      },
+    }),
+    {
+      name: "radiocast-imaging",
+      version: 1,
+      // Only persist lightweight preferences; audio buffers can’t be serialised.
+      partialize: (s) => ({
+        projectName: s.projectName,
+        master: s.master,
+        duck: s.duck,
+        duckDb: s.duckDb,
+        limiter: s.limiter,
+        target: s.target,
+        snapOn: s.snapOn,
+        station: s.station,
+        email: s.email,
+        voice: s.voice,
+        turnaround: s.turnaround,
+        deliverables: s.deliverables,
+      }),
+    },
+  ),
+);
+
+function addUserSound(buf: AudioBuffer, name: string, kind: string, type: TrackType, lane: string | null, at: number) {
+  const id = uid("u");
+  getEngine().buffers.set(id, buf);
+  const s: Sound = { id, name, kind, type, dur: buf.duration, path: wavePath(buf.getChannelData(0)), user: true };
+  useStudio.setState((st) => ({ sounds: [...st.sounds, s] }));
+  const st = useStudio.getState();
+  if (lane) {
+    st.addClip(id, lane, at);
+    const l = useStudio.getState().lanes.find((x) => x.id === lane)!;
+    st.toastMsg(`“${name}” placed on ${l.label} at ${fmt(at)}`, TRACK_TYPES[l.type].color);
+  } else st.toastMsg(`“${name}” saved to Your audio`, TRACK_TYPES[type].color);
+}
