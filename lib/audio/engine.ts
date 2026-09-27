@@ -24,6 +24,10 @@ export class AudioEngine {
   private pvStart = 0;
   private pvDur = 0;
   private peaks: [number, number] = [0, 0];
+  /** Per-track analysers for the live transport (rebuilt on every start). */
+  private laneAnalysers = new Map<string, AnalyserNode>();
+  private lanePeaks = new Map<string, number>();
+  private lbuf = new Float32Array(512);
   buffers = new Map<string, AudioBuffer>();
   running = false;
 
@@ -110,6 +114,12 @@ export class AudioEngine {
       const g = ctx.createGain();
       g.gain.value = dbToGain(l.gain);
       laneGain[l.id] = g;
+      if (ctx === this.ctx) {
+        const an = this.ctx.createAnalyser();
+        an.fftSize = 512;
+        g.connect(an);
+        this.laneAnalysers.set(l.id, an);
+      }
       if (l.type === "bed" && duck && merged.length) {
         const d = ctx.createGain();
         g.connect(d);
@@ -162,6 +172,7 @@ export class AudioEngine {
     void this.ctx.resume();
     this.playWhen = this.ctx.currentTime + 0.05;
     this.playFrom = from;
+    this.laneAnalysers.clear();
     this.sources = this.schedule(this.ctx, this.out, mix, from, this.playWhen);
     this.running = true;
   }
@@ -255,6 +266,24 @@ export class AudioEngine {
     };
     this.peaks = [read(this.aL, this.peaks[0]), read(this.aR, this.peaks[1])];
     return this.peaks;
+  }
+
+  /** Decaying peak level (linear) of one track. Call once per animation frame per track. */
+  laneLevel(id: string): number {
+    const prev = this.lanePeaks.get(id) ?? 0;
+    const an = this.running ? this.laneAnalysers.get(id) : undefined;
+    let v = prev * 0.85;
+    if (an) {
+      an.getFloatTimeDomainData(this.lbuf);
+      let p = 0;
+      for (let i = 0; i < this.lbuf.length; i++) {
+        const a = Math.abs(this.lbuf[i]);
+        if (a > p) p = a;
+      }
+      v = Math.max(p, prev * 0.9);
+    }
+    this.lanePeaks.set(id, v);
+    return v;
   }
 
   async render(mix: MixSnapshot, end: number): Promise<AudioBuffer> {

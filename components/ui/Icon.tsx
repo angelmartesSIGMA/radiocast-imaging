@@ -3,6 +3,14 @@ import type { SVGProps } from "react";
 const PATHS = {
   rewind: <path d="M6 5v14M19 5 9 12l10 7V5Z" />,
   play: <path d="M7 5v14l11-7Z" />,
+  music: (
+    <>
+      <path d="M9 18V5l11-2v13" />
+      <circle cx="6" cy="18" r="3" />
+      <circle cx="17" cy="16" r="3" />
+    </>
+  ),
+  bolt: <path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z" />,
   chevronDown: <path d="m6 9 6 6 6-6" />,
   cloud: <path d="M7 18a5 5 0 0 1-.9-9.9A6 6 0 0 1 17.7 9 4.5 4.5 0 0 1 17.5 18Z" />,
   sparkle: <path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8Z" />,

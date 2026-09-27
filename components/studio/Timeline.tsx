@@ -1,6 +1,7 @@
 "use client";
 
 import { memo, useEffect, useRef, useState } from "react";
+import { getEngine } from "@/lib/audio/engine";
 import { clock, dom } from "@/lib/studio/clock";
 import { HEADER_W, TRACK_TYPES } from "@/lib/studio/constants";
 import { fmt, fmtDb, fmtSec, fmtShort } from "@/lib/studio/format";
@@ -24,6 +25,7 @@ export function Timeline() {
   const hoverRef = useRef<HTMLDivElement>(null);
   const hoverTagRef = useRef<HTMLSpanElement>(null);
   const ppsSet = useRef(false);
+  const [viewH, setViewH] = useState(600);
 
   const pps = s.pps;
   const total = s.total();
@@ -44,6 +46,7 @@ export function Timeline() {
     sc.addEventListener("wheel", onWheel, { passive: false });
     const ro = new ResizeObserver(() => {
       const w = sc.clientWidth;
+      setViewH(sc.clientHeight);
       const st = useStudio.getState();
       if (!ppsSet.current && w > 300) {
         ppsSet.current = true;
@@ -86,6 +89,28 @@ export function Timeline() {
     [],
   );
   useEffect(() => clock.set(clock.t), [pps]);
+
+  // Per-track level meters in the track headers.
+  useEffect(() => {
+    let raf = 0;
+    const engine = getEngine();
+    const paint = () => {
+      const root = scrollRef.current;
+      if (root) {
+        for (const el of root.querySelectorAll<HTMLElement>("[data-lane-meter]")) {
+          const v = engine.laneLevel(el.dataset.laneMeter!);
+          const pct = Math.max(0, Math.min(1, (20 * Math.log10(v + 1e-6) + 48) / 48));
+          el.style.transform = `scaleY(${pct})`;
+        }
+      }
+      raf = requestAnimationFrame(paint);
+    };
+    raf = requestAnimationFrame(paint);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
+  // Tracks grow to fill the panel (within limits) instead of leaving a void below them.
+  const laneH = Math.round(Math.max(76, Math.min(150, (viewH - 30 - 48 - 2) / Math.max(1, s.lanes.length) - 1)));
 
   const ticks: { x: number; label: string }[] = [];
   for (let t = 0; t <= total; t += major)
@@ -131,7 +156,12 @@ export function Timeline() {
   return (
     <div className={css.frame}>
       <div ref={scrollRef} className={css.scroll}>
-        <div className={css.inner} style={{ width: HEADER_W + trackW }} onPointerMove={onHover} onPointerLeave={hideHover}>
+        <div
+          className={css.inner}
+          style={{ width: HEADER_W + trackW, "--lane-h": `${laneH}px` } as React.CSSProperties}
+          onPointerMove={onHover}
+          onPointerLeave={hideHover}
+        >
           {/* ruler */}
           <div className={css.rulerRow}>
             <div className={css.rulerCorner}>Tracks</div>
@@ -258,7 +288,13 @@ const LaneRow = memo(function LaneRow({
     <div className={css.lane} style={{ "--c": LC.color } as React.CSSProperties} data-muted={!audible || undefined}>
       <div className={css.laneHead}>
         <span className={css.laneBar} />
+        <span className={css.laneMeter} aria-hidden="true">
+          <span data-lane-meter={lane.id} />
+        </span>
         <div className={css.laneTitle}>
+          <span className={css.laneIcon}>
+            <Icon name={lane.type === "voice" ? "mic" : lane.type === "bed" ? "music" : "bolt"} size={12} />
+          </span>
           {renaming ? (
             <input
               className={css.rename}

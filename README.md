@@ -15,7 +15,18 @@ npm run build
 
 ## Deploy
 
-Import the repo in Vercel. It detects Next.js automatically and needs no environment variables.
+Import the repo in Vercel; it detects Next.js automatically.
+
+### Password protection (Basic Auth)
+
+The whole site sits behind HTTP Basic Auth (`proxy.ts`). Set these in **Vercel → Project → Settings → Environment Variables** for Production and Preview, then redeploy:
+
+| Variable | Example |
+| --- | --- |
+| `BASIC_AUTH_USER` | `radiocast` |
+| `BASIC_AUTH_PASSWORD` | a long random password |
+
+If either variable is missing, a deployed build returns `503` instead of going public. `npm run dev` stays open without them. To test auth locally, copy `.env.example` to `.env.local`.
 
 ## Layout
 
@@ -52,6 +63,8 @@ It's a port of `design/imaging-studio-v2.reference.html` with these additions:
 - Each track gets its own colour (a second FX track is pink, not another amber). Clips use tinted gradients, show higher-resolution waveforms, and hide their labels when they're too narrow to read.
 - A single transport pill in the header (play, record, loop, time, target status and a gradient level meter). The session title shows its save status underneath.
 - A grouped, segmented toolbar; a library with a segmented filter and section headings; and a quieter inspector with compact switches.
+
+- Tracks grow to fill the timeline, each with a type icon (mic, music, bolt) and a live level meter in its header.
 
 ### Interaction and usability pass
 

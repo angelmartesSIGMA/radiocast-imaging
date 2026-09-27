@@ -129,7 +129,7 @@
 /* ── lanes ─────────────────────────────────────────── */
 .lane {
   display: flex;
-  height: 88px;
+  height: var(--lane-h, 88px);
   border-bottom: 1px solid var(--line);
 }
 .lane:nth-child(odd) .track {
@@ -145,7 +145,7 @@
   flex-direction: column;
   justify-content: center;
   gap: 10px;
-  padding: 0 14px 0 18px;
+  padding: 0 18px 0 16px;
   border-right: 1px solid var(--line);
   background: var(--panel);
 }
@@ -164,6 +164,35 @@
 }
 .lane[data-muted] .laneName {
   color: var(--fg-3);
+}
+.laneIcon {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--c) 16%, transparent);
+  color: var(--c);
+}
+.laneMeter {
+  position: absolute;
+  right: 6px;
+  top: 12px;
+  bottom: 12px;
+  width: 3px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  overflow: hidden;
+}
+.laneMeter span {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: linear-gradient(0deg, var(--c) 0%, var(--c) 70%, #ffb547 88%, #ff4d6a 100%);
+  transform-origin: bottom;
+  transform: scaleY(0);
+  will-change: transform;
 }
 .laneTitle {
   display: flex;
