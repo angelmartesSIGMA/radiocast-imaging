@@ -27,6 +27,8 @@ export interface Clip {
   gain: number;
   fadeIn: number;
   fadeOut: number;
+  /** Play the source backwards (reverse swells, reverse reverbs). */
+  reverse?: boolean;
 }
 
 export interface Lane {
@@ -36,6 +38,8 @@ export interface Lane {
   gain: number;
   mute: boolean;
   solo: boolean;
+  /** Track processing preset id (see lib/audio/fx.ts). */
+  fx?: string;
 }
 
 export interface MixSnapshot {

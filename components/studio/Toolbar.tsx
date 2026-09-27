@@ -62,11 +62,59 @@ export function Toolbar() {
         </label>
       </div>
 
+      <div className={css.group}>
+        <div className={css.seg} role="radiogroup" aria-label="Grid">
+          {(["time", "beats"] as const).map((m) => (
+            <button
+              key={m}
+              type="button"
+              role="radio"
+              aria-checked={s.gridMode === m}
+              onClick={() => s.set({ gridMode: m })}
+              data-tip={m === "time" ? "Grid in seconds" : "Grid in bars and beats — snap cuts to the bed's tempo"}
+            >
+              {m === "time" ? "Time" : "Beats"}
+            </button>
+          ))}
+        </div>
+        {s.gridMode === "beats" && (
+          <label className={css.bpm} data-tip="Tempo of your music bed">
+            <input
+              type="number"
+              min={40}
+              max={240}
+              value={s.bpm}
+              onChange={(e) => {
+                const v = +e.target.value;
+                if (v >= 40 && v <= 240) s.set({ bpm: v });
+              }}
+              aria-label="Tempo in BPM"
+            />
+            <span>BPM</span>
+          </label>
+        )}
+      </div>
+
+      <div className={css.group}>
+        <IconButton
+          icon="rowsThin"
+          label="Thinner tracks"
+          disabled={s.laneH <= 44}
+          onClick={() => s.set({ laneH: Math.max(44, s.laneH - 16) })}
+        />
+        <IconButton
+          icon="rowsTall"
+          label="Taller tracks"
+          disabled={s.laneH >= 180}
+          onClick={() => s.set({ laneH: Math.min(180, s.laneH + 16) })}
+        />
+      </div>
+
       <div className={css.spacer} />
 
       <button type="button" className={css.cmd} onClick={() => s.set({ palette: {} })} data-tip="Search sounds and actions" data-kbd="⌘K">
         <Icon name="search" size={14} />
-        {!compact && <span>Search</span>}
+        {s.vw >= 1480 && <span>Search</span>}
         {!compact && <kbd>⌘K</kbd>}
       </button>
 

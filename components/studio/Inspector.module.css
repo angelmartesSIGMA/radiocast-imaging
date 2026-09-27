@@ -290,3 +290,129 @@
   border-radius: 999px;
   background: var(--red);
 }
+
+.groupRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.linkBtn {
+  border: 0;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  padding: 4px 9px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--fg);
+  cursor: pointer;
+}
+.linkBtn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12);
+}
+.linkBtn:disabled {
+  opacity: 0.5;
+}
+.hint {
+  margin: 6px 0 0;
+  font-size: 11.5px;
+  color: var(--fg-3);
+}
+.seg {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 8px;
+  background: var(--bg-sunk);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.seg button {
+  flex: 1;
+  height: 24px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  font-size: 12px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--fg-3);
+  cursor: pointer;
+}
+.seg button:hover {
+  color: var(--fg-2);
+}
+.seg button[aria-checked="true"] {
+  background: var(--elev);
+  color: var(--fg);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+.loud {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.loudTrack {
+  position: relative;
+  height: 6px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.09));
+}
+.loudFill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #3ddba4, #c26bff);
+}
+.loudMark {
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  width: 2px;
+  margin-left: -1px;
+  border-radius: 1px;
+  background: #fff;
+}
+.loudRead {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11.5px;
+  color: var(--fg-3);
+}
+.loudRead b {
+  font-weight: 500;
+  font-size: 13px;
+  color: var(--fg);
+}
+.fxList {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.fxItem {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  padding: 6px 9px;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+}
+.fxItem:hover {
+  background: var(--hover);
+}
+.fxItem[aria-checked="true"] {
+  background: var(--active);
+  box-shadow: inset 2px 0 0 var(--fill-color, var(--accent));
+}
+.fxName {
+  font-size: 12.5px;
+  font-weight: 500;
+}
+.fxBlurb {
+  font-size: 11px;
+  color: var(--fg-3);
+}

@@ -2,8 +2,9 @@
 
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { encodeWav, bufferPeak, wavePath } from "@/lib/audio/dsp";
-import { getEngine } from "@/lib/audio/engine";
+import { encodeWav, wavePath } from "@/lib/audio/dsp";
+import { AudioEngine, getEngine } from "@/lib/audio/engine";
+import { applyGain, limit, measureLufs, peakOf } from "@/lib/audio/loudness";
 import { clock, dom } from "./clock";
 import { audioStore } from "./idb";
 import { defaultLanes, LANE_IDS, TEMPLATES } from "./templates";
@@ -79,6 +80,14 @@ export interface StudioState {
   libOpen: boolean;
   inspOpen: boolean;
   snapOn: boolean;
+  /** Track row height in px (user adjustable). */
+  laneH: number;
+  bpm: number;
+  gridMode: "time" | "beats";
+  /** Export loudness target in LUFS; null = no normalisation. */
+  loudTarget: number | null;
+  loudness: { lufs: number; peakDb: number; at: number; source: "mix" | "export" } | null;
+  measuring: boolean;
   filter: LibraryFilter;
   search: string;
   selected: string | null;
@@ -140,6 +149,8 @@ interface Actions {
   removeClip(id: string): void;
   updateClip(id: string, patch: Partial<Clip>, restart?: boolean): void;
   duplicate(id?: string | null): void;
+  toggleReverse(id?: string | null): void;
+  measureLoudness(): Promise<void>;
   split(): void;
 
   addLane(type: TrackType): void;
@@ -210,6 +221,12 @@ export const useStudio = create<Studio>()(
       libOpen: initialW >= 1200,
       inspOpen: initialW >= 1024,
       snapOn: true,
+      laneH: 68,
+      bpm: 120,
+      gridMode: "time",
+      loudTarget: -14,
+      loudness: null,
+      measuring: false,
       filter: "all",
       search: "",
       selected: null,
@@ -250,7 +267,7 @@ export const useStudio = create<Studio>()(
         bumpIds([...st.clips.map((c) => c.id), ...st.lanes.map((l) => l.id)]);
         if (!st.hasSession) {
           const t = TEMPLATES[0];
-          set({ sounds, ready: true, hasSession: true, clips: buildClips(t.id), lanes: defaultLanes(), target: t.target, projectName: t.title });
+          set({ sounds, ready: true, hasSession: true, clips: buildClips(t.id), lanes: defaultLanes(t.laneFx), target: t.target, projectName: t.title });
         } else set({ sounds, ready: true });
 
         // Restore uploads and takes from IndexedDB.
@@ -277,7 +294,7 @@ export const useStudio = create<Studio>()(
         if (s.playing) s.stop();
         s.commit();
         clock.set(0);
-        set({ clips: buildClips(t.id), lanes: defaultLanes(), target: t.target, projectName: t.title, selected: null, palette: null });
+        set({ clips: buildClips(t.id), lanes: defaultLanes(t.laneFx), target: t.target, projectName: t.title, selected: null, palette: null });
         const prev = { projectName: s.projectName, target: s.target };
         get().toastMsg(`Started “${t.name}”`, COLORS.violet, {
           label: "Undo",
@@ -336,8 +353,21 @@ export const useStudio = create<Studio>()(
         return Math.max(get().sessionEnd() + 12, (target ?? 0) + 8, (viewW - HEADER_W) / pps, 20);
       },
       scale() {
-        const pps = get().pps;
-        return SCALES.find((s) => s[0] * pps >= 72) ?? SCALES[SCALES.length - 1];
+        const { pps, gridMode, bpm } = get();
+        if (gridMode === "beats") {
+          const beat = 60 / bpm;
+          // [major, minor] in beats: bars/beats when zoomed in, bigger steps when zoomed out.
+          const steps: [number, number][] = [
+            [1, 0.25],
+            [4, 1],
+            [8, 2],
+            [16, 4],
+            [32, 8],
+          ];
+          const pick = steps.find(([mj]) => mj * beat * pps >= 60) ?? steps[steps.length - 1];
+          return [pick[0] * beat, pick[1] * beat];
+        }
+        return SCALES.find((sc) => sc[0] * pps >= 72) ?? SCALES[SCALES.length - 1];
       },
 
       // ───────────────────────────── transport
@@ -386,7 +416,7 @@ export const useStudio = create<Studio>()(
           return;
         }
         clock.set(t);
-        if (!s.recording && t >= end + 0.15) s.stop();
+        if (!s.recording && t >= end + AudioEngine.tail(s.mix()) + 0.15) s.stop();
       },
       preview(id) {
         const s = get();
@@ -474,6 +504,19 @@ export const useStudio = create<Studio>()(
         set((st) => ({ clips: [...st.clips, n], selected: n.id, menu: null }));
         get().restartIfPlaying();
       },
+      toggleReverse(id) {
+        const s = get();
+        const c = s.clips.find((x) => x.id === (id ?? s.selected));
+        if (!c) return;
+        const snd = s.sounds.find((x) => x.id === c.soundId);
+        s.commit();
+        // Keep the same audible region: mirror the offset inside the source.
+        const offset = snd ? Math.max(0, snd.dur - c.offset - c.len) : c.offset;
+        s.updateClip(c.id, { reverse: !c.reverse, offset, fadeIn: c.fadeOut, fadeOut: c.fadeIn });
+        set({ menu: null });
+        s.toastMsg(c.reverse ? "Clip plays forwards" : "Clip reversed", COLORS.violet, undoAction());
+      },
+
       split() {
         const s = get();
         const t = clock.t;
@@ -510,6 +553,7 @@ export const useStudio = create<Studio>()(
           id: uid("L"),
           type,
           label: n ? `${TRACK_TYPES[type].label} ${n + 1}` : TRACK_TYPES[type].label,
+          fx: type === "voice" ? "broadcast" : undefined,
           gain: 0,
           mute: false,
           solo: false,
@@ -667,32 +711,51 @@ export const useStudio = create<Studio>()(
         set({ exporting: true });
         try {
           const buf = await getEngine().render(s.mix(), end);
-          let peak = bufferPeak(buf);
-          // Output ceiling: the Web Audio compressor has no lookahead, so trim any overshoot.
-          const ceiling = dbToGain(-0.3);
-          if (s.limiter && peak > ceiling) {
-            const k = ceiling / peak;
-            for (let c = 0; c < buf.numberOfChannels; c++) {
-              const d = buf.getChannelData(c);
-              for (let i = 0; i < d.length; i++) d[i] *= k;
-            }
-            peak = ceiling;
+          const ceiling = dbToGain(-1);
+          // Loudness normalise (optional), then a look-ahead limiter to a −1 dBFS ceiling.
+          if (s.loudTarget != null) {
+            const before = await measureLufs(buf);
+            if (Number.isFinite(before)) applyGain(buf, dbToGain(s.loudTarget - before));
           }
+          if (s.limiter || s.loudTarget != null) limit(buf, ceiling);
+          let lufs = await measureLufs(buf);
+          // Limiting can pull loudness under target; one corrective pass gets it back.
+          if (s.loudTarget != null && Number.isFinite(lufs) && Math.abs(lufs - s.loudTarget) > 0.2) {
+            applyGain(buf, dbToGain(s.loudTarget - lufs));
+            limit(buf, ceiling);
+            lufs = await measureLufs(buf);
+          }
+          const peakDb = 20 * Math.log10(peakOf(buf) || 1e-6);
+          set({ loudness: { lufs, peakDb, at: Date.now(), source: "export" } });
+
           const a = document.createElement("a");
           a.href = URL.createObjectURL(encodeWav(buf));
           a.download = `${(s.projectName || "imaging").replace(/[^\w\- ]+/g, "").replace(/\s+/g, " ").trim() || "imaging"}.wav`;
           a.click();
           setTimeout(() => URL.revokeObjectURL(a.href), 4000);
-          const peakDb = 20 * Math.log10(peak || 1e-6);
-          if (peak > 1) get().toastMsg(
-              `Exported, but it clips (${peakDb.toFixed(1)} dBFS) — ${s.limiter ? "lower the master" : "turn on the limiter"}`,
-              COLORS.amber,
-            );
-          else get().toastMsg(`Exported WAV · 44.1 kHz stereo · peak ${peakDb.toFixed(1)} dBFS`, COLORS.green);
+          const loud = Number.isFinite(lufs) ? `${lufs.toFixed(1)} LUFS · ` : "";
+          if (peakDb > 0) get().toastMsg(`Exported, but it clips (${peakDb.toFixed(1)} dBFS) — turn on the limiter`, COLORS.amber);
+          else get().toastMsg(`Exported WAV · ${loud}peak ${peakDb.toFixed(1)} dBFS`, COLORS.green);
         } catch {
           get().toastMsg("Export failed", COLORS.red);
         }
         set({ exporting: false });
+      },
+
+      async measureLoudness() {
+        const s = get();
+        const end = s.sessionEnd();
+        if (!end || s.measuring) return;
+        set({ measuring: true });
+        try {
+          const buf = await getEngine().render(s.mix(), end);
+          const lufs = await measureLufs(buf);
+          const peakDb = 20 * Math.log10(peakOf(buf) || 1e-6);
+          set({ loudness: { lufs, peakDb, at: Date.now(), source: "mix" } });
+        } catch {
+          get().toastMsg("Couldn’t measure loudness", COLORS.red);
+        }
+        set({ measuring: false });
       },
     }),
     {
@@ -713,6 +776,10 @@ export const useStudio = create<Studio>()(
         limiter: s.limiter,
         target: s.target,
         snapOn: s.snapOn,
+        laneH: s.laneH,
+        bpm: s.bpm,
+        gridMode: s.gridMode,
+        loudTarget: s.loudTarget,
         station: s.station,
         email: s.email,
         voice: s.voice,

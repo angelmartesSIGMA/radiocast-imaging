@@ -102,7 +102,7 @@
   color: var(--fg-2);
 }
 .cmd span {
-  min-width: 110px;
+  min-width: 70px;
   text-align: left;
 }
 .cmd kbd {
@@ -112,4 +112,58 @@
   font-family: var(--font-sans-stack);
   font-size: 11px;
   color: var(--fg-3);
+}
+
+.seg {
+  display: flex;
+  gap: 1px;
+  height: 26px;
+}
+.seg button {
+  height: 26px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--fg-3);
+  cursor: pointer;
+}
+.seg button:hover {
+  color: var(--fg-2);
+}
+.seg button[aria-checked="true"] {
+  background: var(--elev);
+  color: var(--fg);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+.bpm {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 8px 0 4px;
+  font-size: 11px;
+  color: var(--fg-3);
+}
+.bpm input {
+  width: 38px;
+  height: 22px;
+  border: 1px solid var(--line-2);
+  border-radius: 5px;
+  background: var(--bg-sunk);
+  padding: 0 4px;
+  font: inherit;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--fg);
+  text-align: center;
+  outline: none;
+  -moz-appearance: textfield;
+}
+.bpm input::-webkit-inner-spin-button {
+  display: none;
+}
+.bpm input:focus {
+  border-color: var(--line-3);
 }

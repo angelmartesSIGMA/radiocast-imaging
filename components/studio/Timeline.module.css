@@ -649,3 +649,129 @@
   line-height: 1.4;
   color: var(--fg-3);
 }
+
+/* ── adjustable track height ───────────────────────── */
+.resize {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -4px;
+  z-index: 3;
+  height: 8px;
+  cursor: row-resize;
+}
+.resize::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 3px;
+  width: 28px;
+  height: 2px;
+  margin-left: -14px;
+  border-radius: 2px;
+  background: var(--fg-3);
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.laneHead:hover .resize::after,
+.resize:hover::after {
+  opacity: 0.8;
+}
+
+/* Thin tracks: one row — name, FX, M/S. */
+.lane[data-compact] .laneHead {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+}
+.lane[data-compact] .laneTitle {
+  flex: 1;
+  min-width: 0;
+}
+.lane[data-compact] .laneCtrls input {
+  display: none;
+}
+.lane[data-compact] .laneBar,
+.lane[data-compact] .laneMeter {
+  top: 6px;
+  bottom: 6px;
+}
+.lane[data-compact] .clip,
+.lane[data-compact] .ghost,
+.lane[data-compact] .recBlock {
+  top: 4px;
+  bottom: 4px;
+}
+.lane[data-compact] .clipHead {
+  height: 15px;
+}
+.lane[data-compact] .clipName {
+  font-size: 10px;
+}
+.lane[data-compact] .clipWave {
+  top: 15px;
+  height: calc(100% - 17px);
+}
+.lane[data-compact] .fadeKnob {
+  top: 15px;
+}
+.lane[data-compact] .fxPill {
+  display: none;
+}
+
+/* ── track FX pill ─────────────────────────────────── */
+.fxPill {
+  position: relative;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  max-width: 84px;
+  padding: 0 7px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.05);
+  font-size: 10.5px;
+  font-weight: 500;
+  color: var(--fg-3);
+  cursor: pointer;
+  overflow: hidden;
+}
+.fxPill span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.fxPill:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--fg);
+}
+.fxPill[data-on] {
+  background: color-mix(in srgb, var(--c) 18%, transparent);
+  color: color-mix(in srgb, var(--c) 40%, #fff);
+}
+.fxPill select {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.fxPill select option {
+  background: var(--raised);
+  color: var(--fg);
+}
+
+/* ── reversed clips ────────────────────────────────── */
+.clipWave[data-reverse] {
+  transform: scaleX(-1);
+}
+.revBadge {
+  flex-shrink: 0;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.14);
+  padding: 0 3px;
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 13px;
+  color: #fff;
+}

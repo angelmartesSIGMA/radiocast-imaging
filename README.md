@@ -64,7 +64,24 @@ It's a port of `design/imaging-studio-v2.reference.html` with these additions:
 - A single transport pill in the header (play, record, loop, time, target status and a gradient level meter). The session title shows its save status underneath.
 - A grouped, segmented toolbar; a library with a segmented filter and section headings; and a quieter inspector with compact switches.
 
-- Tracks grow to fill the timeline, each with a type icon (mic, music, bolt) and a live level meter in its header.
+- Each track shows a type icon (mic, music, bolt) and a live level meter in its header.
+
+### Imaging tools
+
+- **Adjustable track height.** Drag any track's bottom edge, or use the thinner/taller buttons in the toolbar. Double-click the edge to reset. Below about 60px, tracks switch to a compact one-line layout.
+- **Track processing presets** (`lib/audio/fx.ts`), picked from the FX pill on each track or in the inspector:
+  - Broadcast (the default on voice tracks)
+  - Big voice
+  - Telephone
+  - Megaphone
+  - Hall reverb
+  - Echo
+
+  They are built from Web Audio nodes, so export sounds the same as playback, and reverb/echo tails are rendered.
+- **Reverse clips** from the inspector, the right-click menu or ⌘K. The waveform flips and gets a REV badge. Fades swap so the clip keeps the same shape.
+- **Beats grid.** Switch the ruler to bars and beats and set the BPM. Snapping and nudging then follow the beat.
+- **Loudness.** The export target can be off, −23, −16, −14 or −10 LUFS. Export normalizes to the target (BS.1770 K-weighting, gated), then runs a look-ahead limiter to a −1 dBFS ceiling. Measured against pyloudnorm, the difference was 0.03 LU. **Measure** shows the loudness of the current mix.
+- **New sounds:** cinematic boom, downlifter, tape stop, rewind and radio tune. The templates use them, and set track FX where it helps (hall on the liner's chime, echo on the sweeper's tail).
 
 ### Interaction and usability pass
 

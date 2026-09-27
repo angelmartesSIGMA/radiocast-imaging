@@ -247,4 +247,112 @@ export const GENERATORS: Generator[] = [
       }
     },
   },
+  {
+    id: "boom",
+    name: "Cinematic boom",
+    kind: "Hit",
+    type: "fx",
+    dur: 3.2,
+    fn(L, R, n) {
+      let ph = 0;
+      let lp = 0;
+      for (let i = 0; i < n; i++) {
+        const t = i / SR;
+        ph += (TAU * (38 + 70 * Math.exp(-t * 8))) / SR;
+        lp += (noise() - lp) * 0.08;
+        const body = Math.sin(ph) * Math.exp(-t * 1.3);
+        const crack = noise() * Math.exp(-t * 30) * 0.6;
+        const rumble = lp * Math.exp(-t * 1.8) * 0.9;
+        L[i] = body + crack + rumble;
+        R[i] = body + crack * 0.9 - rumble * 0.6;
+      }
+      edge(L, R, n, 0.001, 0.3);
+    },
+  },
+  {
+    id: "downlifter",
+    name: "Downlifter",
+    kind: "Sweep",
+    type: "fx",
+    dur: 2.6,
+    fn(L, R, n) {
+      let ph = 0;
+      let lp = 0;
+      for (let i = 0; i < n; i++) {
+        const t = i / SR;
+        const x = t / 2.6;
+        ph += (TAU * 2400 * Math.pow(60 / 2400, x)) / SR;
+        lp += (noise() - lp) * (0.5 - x * 0.45);
+        const env = Math.pow(1 - x, 1.6);
+        const v = (Math.sin(ph) * 0.25 + lp * 0.6) * env;
+        L[i] = v;
+        R[i] = v * 0.9 + lp * 0.05 * env;
+      }
+      edge(L, R, n, 0.005, 0.1);
+    },
+  },
+  {
+    id: "tapestop",
+    name: "Tape stop",
+    kind: "FX",
+    type: "fx",
+    dur: 1.2,
+    fn(L, R, n) {
+      let ph = 0;
+      for (let i = 0; i < n; i++) {
+        const t = i / SR;
+        const speed = Math.max(0, 1 - Math.pow(t / 1.2, 0.7));
+        ph += (TAU * 110 * speed) / SR;
+        const chord = Math.sin(ph) + 0.5 * Math.sin(ph * 1.5) + 0.3 * Math.sin(ph * 2);
+        const v = chord * 0.35 * speed;
+        L[i] = v;
+        R[i] = v;
+      }
+      edge(L, R, n, 0.003, 0.05);
+    },
+  },
+  {
+    id: "rewind",
+    name: "Rewind",
+    kind: "FX",
+    type: "fx",
+    dur: 1.5,
+    fn(L, R, n) {
+      let ph = 0;
+      for (let i = 0; i < n; i++) {
+        const t = i / SR;
+        const x = t / 1.5;
+        const rate = 4 + 26 * x * x; // chatter speeds up
+        ph += (TAU * rate) / SR;
+        const chatter = 0.5 + 0.5 * Math.sin(ph);
+        const tone = Math.sin(TAU * (300 + 1500 * x) * t) * 0.2;
+        const v = (noise() * 0.35 + tone) * chatter * Math.sin(Math.PI * x);
+        L[i] = v;
+        R[i] = v * (0.6 + 0.4 * chatter);
+      }
+    },
+  },
+  {
+    id: "tune",
+    name: "Radio tune",
+    kind: "FX",
+    type: "fx",
+    dur: 2.4,
+    fn(L, R, n) {
+      let lp = 0;
+      for (let i = 0; i < n; i++) {
+        const t = i / SR;
+        const x = t / 2.4;
+        // static that clears into a pure carrier as the dial lands
+        lp += (noise() - lp) * 0.35;
+        const stat = lp * (1 - x) * 0.6;
+        const whistle = Math.sin(TAU * (1800 - 1500 * x + 60 * Math.sin(TAU * 6 * t)) * t) * 0.18 * (1 - x);
+        const carrier = Math.sin(TAU * 440 * t) * 0.3 * Math.max(0, x - 0.6) * 2.5;
+        const v = stat + whistle + carrier;
+        L[i] = v;
+        R[i] = v * 0.95;
+      }
+      edge(L, R, n, 0.02, 0.15);
+    },
+  },
 ];

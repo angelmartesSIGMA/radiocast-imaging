@@ -63,6 +63,13 @@ function PaletteInner() {
             { id: "del", group: "Edit", label: "Delete selected clip", icon: "trash" as IconName, kbd: "⌫", run: done(() => st().removeClip(sel)) },
           ]
         : []),
+      ...(sel
+        ? [{ id: "rev", group: "Edit", label: "Reverse selected clip", icon: "reverse" as IconName, run: done(() => st().toggleReverse()) }]
+        : []),
+      { id: "grid", group: "View", label: s.gridMode === "beats" ? "Grid in seconds" : "Grid in bars & beats", icon: "magnet", run: done(() => st().set({ gridMode: st().gridMode === "beats" ? "time" : "beats" })) },
+      { id: "thin", group: "View", label: "Thinner tracks", icon: "rowsThin", run: done(() => st().set({ laneH: Math.max(44, st().laneH - 16) })) },
+      { id: "tall", group: "View", label: "Taller tracks", icon: "rowsTall", run: done(() => st().set({ laneH: Math.min(180, st().laneH + 16) })) },
+      { id: "loud", group: "Files", label: "Measure loudness (LUFS)", icon: "gauge", run: done(() => void st().measureLoudness()) },
       { id: "undo", group: "Edit", label: "Undo", icon: "undo", kbd: "⌘Z", run: done(st().undo) },
       { id: "snap", group: "Edit", label: s.snapOn ? "Turn snapping off" : "Turn snapping on", icon: "magnet", run: done(() => st().set({ snapOn: !st().snapOn })) },
       { id: "add-voice", group: "Tracks", label: "Add voice track", icon: "plus", run: done(() => st().addLane("voice")) },
@@ -92,7 +99,7 @@ function PaletteInner() {
       run: done(() => st().set({ target: t.value })),
     }));
     return [...actions, ...sounds, ...templates, ...targets];
-  }, [s.sounds, s.selected, s.playing, s.loop, s.snapOn, s.libOpen, s.inspOpen, lane, ctx.at]);
+  }, [s.sounds, s.selected, s.playing, s.loop, s.snapOn, s.libOpen, s.inspOpen, s.gridMode, lane, ctx.at]);
 
   const words = q.toLowerCase().split(/\s+/).filter(Boolean);
   const shown = words.length

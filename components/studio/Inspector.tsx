@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { FX_PRESETS } from "@/lib/audio/fx";
 import { laneColor } from "@/lib/studio/colors";
 import { fmt, fmtDb, fmtSec, fmtShort } from "@/lib/studio/format";
 import { useStudio } from "@/lib/studio/store";
@@ -136,6 +137,19 @@ function ClipPanel() {
           onCommit={s.commit}
           onChange={(v) => s.updateClip(sel.id, { fadeOut: Math.min(v, sel.len - sel.fadeIn) })}
         />
+        <ToggleRow
+          title="Reverse"
+          sub="Play the clip backwards — reverse swells, reverse reverbs"
+          checked={!!sel.reverse}
+          onToggle={() => s.toggleReverse(sel.id)}
+        />
+      </section>
+
+      <section className={`${css.section} ${css.stack}`} style={{ "--fill-color": T.color } as React.CSSProperties}>
+        <div>
+          <p className={css.label}>{lane.label} processing</p>
+          <FxPicker laneId={lane.id} value={lane.fx} />
+        </div>
       </section>
 
       <div className={css.actions}>
@@ -224,6 +238,8 @@ function SessionPanel() {
           }}
         />
       </section>
+
+      <LoudnessPanel />
 
       <section className={`${css.section} ${css.stack}`}>
         <p className={css.group}>Recording</p>
@@ -333,6 +349,96 @@ function NumberField({
           </button>
         </span>
       </div>
+    </div>
+  );
+}
+
+const LOUD_TARGETS: { value: number | null; label: string; note: string }[] = [
+  { value: null, label: "Off", note: "Export as mixed" },
+  { value: -23, label: "−23", note: "EBU R128 broadcast" },
+  { value: -16, label: "−16", note: "Podcasts" },
+  { value: -14, label: "−14", note: "Streaming" },
+  { value: -10, label: "−10", note: "Hot imaging" },
+];
+
+function LoudnessPanel() {
+  const s = useStudio();
+  const L = s.loudness;
+  const note = LOUD_TARGETS.find((t) => t.value === s.loudTarget)?.note;
+  // Meter scale: −30 … −6 LUFS
+  const pos = (v: number) => `${Math.max(0, Math.min(100, ((v + 30) / 24) * 100))}%`;
+  return (
+    <section className={`${css.section} ${css.stack}`}>
+      <div className={css.groupRow}>
+        <p className={css.group}>Loudness</p>
+        <button
+          type="button"
+          className={css.linkBtn}
+          onClick={() => void s.measureLoudness()}
+          disabled={s.measuring || !s.clips.length}
+        >
+          {s.measuring ? "Measuring…" : "Measure"}
+        </button>
+      </div>
+      <div>
+        <p className={css.label}>Export target (LUFS)</p>
+        <div className={css.seg} role="radiogroup" aria-label="Loudness target">
+          {LOUD_TARGETS.map((t) => (
+            <button
+              key={t.label}
+              type="button"
+              role="radio"
+              aria-checked={s.loudTarget === t.value}
+              onClick={() => s.set({ loudTarget: t.value })}
+              data-tip={t.note}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+        <p className={css.hint}>{note}{s.loudTarget != null ? " · limited to −1 dBFS" : ""}</p>
+      </div>
+      <div className={css.loud}>
+        <div className={css.loudTrack}>
+          {L && Number.isFinite(L.lufs) && <span className={css.loudFill} style={{ width: pos(L.lufs) }} />}
+          {s.loudTarget != null && <span className={css.loudMark} style={{ left: pos(s.loudTarget) }} />}
+        </div>
+        {L && <p className={css.hint}>{L.source === "export" ? "Last export (after normalising)" : "Current mix, before export processing"}</p>}
+        <div className={css.loudRead}>
+          <span>
+            <b className="mono">{L && Number.isFinite(L.lufs) ? L.lufs.toFixed(1) : "—"}</b> LUFS
+          </span>
+          <span>
+            peak <b className="mono">{L ? L.peakDb.toFixed(1) : "—"}</b> dBFS
+          </span>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function FxPicker({ laneId, value }: { laneId: string; value?: string }) {
+  const s = useStudio();
+  const cur = value ?? "none";
+  return (
+    <div className={css.fxList} role="radiogroup" aria-label="Track processing">
+      {FX_PRESETS.map((p) => (
+        <button
+          key={p.id}
+          type="button"
+          role="radio"
+          aria-checked={cur === p.id}
+          className={css.fxItem}
+          onClick={() => {
+            if (cur === p.id) return;
+            s.commit();
+            s.setLane(laneId, { fx: p.id === "none" ? undefined : p.id });
+          }}
+        >
+          <span className={css.fxName}>{p.label}</span>
+          <span className={css.fxBlurb}>{p.blurb}</span>
+        </button>
+      ))}
     </div>
   );
 }

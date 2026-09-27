@@ -11,6 +11,20 @@ const PATHS = {
     </>
   ),
   bolt: <path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z" />,
+  rowsThin: <path d="M4 6h16M4 10h16M4 14h16M4 18h16" />,
+  rowsTall: (
+    <>
+      <rect x="4" y="4" width="16" height="7" rx="1.5" />
+      <rect x="4" y="13" width="16" height="7" rx="1.5" />
+    </>
+  ),
+  reverse: <path d="M9 7H4V2M4.5 7A8 8 0 1 1 4 12" />,
+  gauge: (
+    <>
+      <path d="M4 16a8 8 0 1 1 16 0" />
+      <path d="m12 16 4-5" />
+    </>
+  ),
   chevronDown: <path d="m6 9 6 6 6-6" />,
   cloud: <path d="M7 18a5 5 0 0 1-.9-9.9A6 6 0 0 1 17.7 9 4.5 4.5 0 0 1 17.5 18Z" />,
   sparkle: <path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8Z" />,

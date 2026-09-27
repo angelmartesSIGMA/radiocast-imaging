@@ -21,17 +21,24 @@ export interface Template {
   blurb: string;
   target: number | null;
   clips: TemplateClip[];
+  /** Track FX overrides for this template. */
+  laneFx?: Partial<Record<LaneKey, string>>;
 }
 
 export const LANE_IDS: Record<LaneKey, string> = { voice: "L1", bed: "L2", fx: "L3", fx2: "L4" };
 
-export function defaultLanes(): Lane[] {
-  return [
-    { id: "L1", type: "voice", label: "Voice", gain: 0, mute: false, solo: false },
+export function defaultLanes(fx?: Partial<Record<LaneKey, string>>): Lane[] {
+  const lanes: Lane[] = [
+    { id: "L1", type: "voice", label: "Voice", gain: 0, mute: false, solo: false, fx: "broadcast" },
     { id: "L2", type: "bed", label: "Music bed", gain: 0, mute: false, solo: false },
     { id: "L3", type: "fx", label: "FX", gain: 0, mute: false, solo: false },
     { id: "L4", type: "fx", label: "FX 2", gain: 0, mute: false, solo: false },
   ];
+  if (fx) for (const [k, v] of Object.entries(fx)) {
+    const l = lanes.find((x) => x.id === LANE_IDS[k as LaneKey]);
+    if (l) l.fx = v;
+  }
+  return lanes;
 }
 
 export const TEMPLATES: Template[] = [
@@ -59,9 +66,10 @@ export const TEMPLATES: Template[] = [
     target: 10,
     clips: [
       { sound: "riser", lane: "fx", start: 0, gain: -3 },
-      { sound: "impact", lane: "fx", start: 2.4 },
+      { sound: "boom", lane: "fx", start: 2.4 },
       { sound: "subdrop", lane: "fx2", start: 2.4, gain: -4 },
       { sound: "pulse", lane: "bed", start: 2.4, len: 6, gain: -8, fadeIn: 0.2, fadeOut: 1.2 },
+      { sound: "downlifter", lane: "fx", start: 6.6, gain: -6 },
       { sound: "chime", lane: "fx2", start: 8, gain: -2, fadeOut: 0.3 },
     ],
   },
@@ -77,7 +85,9 @@ export const TEMPLATES: Template[] = [
       { sound: "impact", lane: "fx", start: 2.6 },
       { sound: "zap", lane: "fx2", start: 3, gain: -6 },
       { sound: "stutter", lane: "fx2", start: 3.8, gain: -4 },
+      { sound: "tapestop", lane: "fx", start: 4.2, gain: -6 },
     ],
+    laneFx: { fx2: "echo" },
   },
   {
     id: "liner",
@@ -89,7 +99,9 @@ export const TEMPLATES: Template[] = [
       { sound: "pad", lane: "bed", start: 0, len: 15, gain: -10, fadeIn: 1, fadeOut: 2 },
       { sound: "whoosh", lane: "fx", start: 0, gain: -8 },
       { sound: "chime", lane: "fx2", start: 12.6, gain: -3 },
+      { sound: "tune", lane: "fx2", start: 0, gain: -12, fadeOut: 0.4 },
     ],
+    laneFx: { fx2: "hall" },
   },
   {
     id: "blank",

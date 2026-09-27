@@ -2,6 +2,7 @@ import { SR } from "@/lib/studio/constants";
 import { dbToGain } from "@/lib/studio/format";
 import type { MixSnapshot } from "@/lib/studio/types";
 import { normalize, wavePath } from "./dsp";
+import { buildFx, fxTail } from "./fx";
 import { GENERATORS } from "./generators";
 
 type Ctx = AudioContext | OfflineAudioContext;
@@ -111,9 +112,12 @@ export class AudioEngine {
 
     const laneGain: Record<string, GainNode> = {};
     for (const l of lanes) {
+      // clips → [track FX] → track gain → (duck) → master
+      const fx = buildFx(ctx, l.fx);
       const g = ctx.createGain();
       g.gain.value = dbToGain(l.gain);
-      laneGain[l.id] = g;
+      fx.output.connect(g);
+      laneGain[l.id] = fx.input as GainNode;
       if (ctx === this.ctx) {
         const an = this.ctx.createAnalyser();
         an.fftSize = 512;
@@ -137,7 +141,7 @@ export class AudioEngine {
 
     for (const c of clips) {
       if (!audible(c.lane)) continue;
-      const buf = this.buffers.get(c.soundId);
+      const buf = this.bufferFor(c.soundId, !!c.reverse);
       if (!buf) continue;
       const end = c.start + c.len;
       if (end <= from) continue;
@@ -164,6 +168,28 @@ export class AudioEngine {
       nodes.push(src);
     }
     return nodes;
+  }
+
+  /** Source buffer for a clip, reversed (and cached) if the clip is reversed. */
+  bufferFor(id: string, reverse: boolean): AudioBuffer | undefined {
+    const buf = this.buffers.get(id);
+    if (!buf || !reverse) return buf;
+    const key = `${id}~rev`;
+    let r = this.buffers.get(key);
+    if (!r) {
+      r = this.ctx.createBuffer(buf.numberOfChannels, buf.length, buf.sampleRate);
+      for (let c = 0; c < buf.numberOfChannels; c++) {
+        const d = buf.getChannelData(c).slice().reverse();
+        r.copyToChannel(d, c);
+      }
+      this.buffers.set(key, r);
+    }
+    return r;
+  }
+
+  /** Longest effect tail across the mix, so renders don’t cut reverbs off. */
+  static tail(mix: MixSnapshot) {
+    return mix.lanes.reduce((m, l) => Math.max(m, fxTail(l.fx)), 0);
   }
 
   start(mix: MixSnapshot, from: number) {
@@ -287,7 +313,7 @@ export class AudioEngine {
   }
 
   async render(mix: MixSnapshot, end: number): Promise<AudioBuffer> {
-    const off = new OfflineAudioContext(2, Math.ceil((end + 0.1) * SR), SR);
+    const off = new OfflineAudioContext(2, Math.ceil((end + AudioEngine.tail(mix) + 0.1) * SR), SR);
     this.schedule(off, off.destination, mix, 0, 0);
     return off.startRendering();
   }

@@ -104,6 +104,11 @@ function ClipMenu() {
     { label: "Split at playhead", icon: "split", kbd: "S", run: s.split },
     { label: "Duplicate", icon: "copy", kbd: "⌘D", run: () => s.duplicate(menu.clipId) },
     {
+      label: s.clips.find((x) => x.id === menu.clipId)?.reverse ? "Play forwards" : "Reverse",
+      icon: "reverse",
+      run: () => s.toggleReverse(menu.clipId),
+    },
+    {
       label: "Move playhead here",
       icon: "target",
       run: () => {

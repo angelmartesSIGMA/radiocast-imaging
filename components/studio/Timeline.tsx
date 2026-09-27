@@ -5,6 +5,7 @@ import { getEngine } from "@/lib/audio/engine";
 import { clock, dom } from "@/lib/studio/clock";
 import { HEADER_W, TRACK_TYPES } from "@/lib/studio/constants";
 import { fmt, fmtDb, fmtSec, fmtShort } from "@/lib/studio/format";
+import { FX_PRESETS } from "@/lib/audio/fx";
 import { laneColor } from "@/lib/studio/colors";
 import { useStudio } from "@/lib/studio/store";
 import { TEMPLATES } from "@/lib/studio/templates";
@@ -25,7 +26,6 @@ export function Timeline() {
   const hoverRef = useRef<HTMLDivElement>(null);
   const hoverTagRef = useRef<HTMLSpanElement>(null);
   const ppsSet = useRef(false);
-  const [viewH, setViewH] = useState(600);
 
   const pps = s.pps;
   const total = s.total();
@@ -46,7 +46,6 @@ export function Timeline() {
     sc.addEventListener("wheel", onWheel, { passive: false });
     const ro = new ResizeObserver(() => {
       const w = sc.clientWidth;
-      setViewH(sc.clientHeight);
       const st = useStudio.getState();
       if (!ppsSet.current && w > 300) {
         ppsSet.current = true;
@@ -109,12 +108,21 @@ export function Timeline() {
     return () => cancelAnimationFrame(raf);
   }, []);
 
-  // Tracks grow to fill the panel (within limits) instead of leaving a void below them.
-  const laneH = Math.round(Math.max(76, Math.min(150, (viewH - 30 - 48 - 2) / Math.max(1, s.lanes.length) - 1)));
+  const laneH = s.laneH;
+  const beat = 60 / s.bpm;
+  const tickLabel = (t: number) => {
+    if (s.gridMode === "beats") {
+      const beats = Math.round(t / beat);
+      const bar = Math.floor(beats / 4) + 1;
+      const b = (beats % 4) + 1;
+      return major < 4 * beat - 1e-6 ? `${bar}.${b}` : `${bar}`;
+    }
+    return major < 1 ? t.toFixed(major < 0.5 ? 2 : 1) : fmtShort(t);
+  };
 
   const ticks: { x: number; label: string }[] = [];
   for (let t = 0; t <= total; t += major)
-    ticks.push({ x: t * pps, label: major < 1 ? t.toFixed(major < 0.5 ? 2 : 1) : fmtShort(t) });
+    ticks.push({ x: t * pps, label: tickLabel(t) });
 
   const onRulerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     const el = e.currentTarget;
@@ -146,7 +154,11 @@ export function Timeline() {
     if (!visible) return;
     line.style.transform = `translateX(${HEADER_W + x}px)`;
     tagEl.style.transform = `translateX(${x}px)`;
-    tagEl.textContent = fmt(x / pps);
+    const st = useStudio.getState();
+    if (st.gridMode === "beats") {
+      const beats = x / pps / (60 / st.bpm);
+      tagEl.textContent = `${Math.floor(beats / 4) + 1}.${Math.floor(beats % 4) + 1}`;
+    } else tagEl.textContent = fmt(x / pps);
   };
   const hideHover = () => {
     if (hoverRef.current) hoverRef.current.style.opacity = "0";
@@ -278,6 +290,7 @@ const LaneRow = memo(function LaneRow({
   const pps = useStudio((s) => s.pps);
   const renaming = useStudio((s) => s.renaming === lane.id);
   const siblings = useStudio((s) => s.lanes.filter((x) => x.type === lane.type).length);
+  const compact = useStudio((s) => s.laneH < 62);
   const st = useStudio.getState;
 
   const act = clips.find((c) => c.id === activeClip);
@@ -285,8 +298,22 @@ const LaneRow = memo(function LaneRow({
   const showTag = (ghost && dragging) || (act && tag);
 
   return (
-    <div className={css.lane} style={{ "--c": LC.color } as React.CSSProperties} data-muted={!audible || undefined}>
+    <div
+      className={css.lane}
+      style={{ "--c": LC.color } as React.CSSProperties}
+      data-muted={!audible || undefined}
+      data-compact={compact || undefined}
+    >
       <div className={css.laneHead}>
+        <div
+          className={css.resize}
+          onPointerDown={startResize}
+          onDoubleClick={() => st().set({ laneH: 68 })}
+          data-tip="Drag to resize tracks · double-click to reset"
+          role="separator"
+          aria-orientation="horizontal"
+          aria-label="Resize tracks"
+        />
         <span className={css.laneBar} />
         <span className={css.laneMeter} aria-hidden="true">
           <span data-lane-meter={lane.id} />
@@ -323,6 +350,7 @@ const LaneRow = memo(function LaneRow({
               {lane.label}
             </span>
           )}
+          <FxSelect laneId={lane.id} value={lane.fx} />
           {siblings > 1 && (
             <button
               type="button"
@@ -588,6 +616,11 @@ function ClipView({
     >
       {w >= 40 && (
         <div className={css.clipHead}>
+          {c.reverse && (
+            <span className={css.revBadge} aria-label="Reversed">
+              REV
+            </span>
+          )}
           <span className={css.clipName}>{snd.name}</span>
           {w > 170 && c.gain !== 0 && <span className={css.clipMeta}>{fmtDb(c.gain)}</span>}
           {w > 120 && <span className={css.clipMeta}>{fmtSec(c.len)}</span>}
@@ -595,7 +628,8 @@ function ClipView({
       )}
       <svg
         className={css.clipWave}
-        viewBox={`${((c.offset / snd.dur) * 100).toFixed(3)} 0 ${((c.len / snd.dur) * 100).toFixed(3)} 40`}
+        data-reverse={c.reverse || undefined}
+        viewBox={`${(((c.reverse ? snd.dur - c.offset - c.len : c.offset) / snd.dur) * 100).toFixed(3)} 0 ${((c.len / snd.dur) * 100).toFixed(3)} 40`}
         preserveAspectRatio="none"
       >
         <path d={snd.path} />
@@ -623,5 +657,47 @@ function ClipView({
         </>
       )}
     </div>
+  );
+}
+
+/** Drag any track's bottom edge to resize every track. */
+function startResize(e: React.PointerEvent) {
+  e.preventDefault();
+  e.stopPropagation();
+  const st = useStudio.getState;
+  const y0 = e.clientY;
+  const h0 = st().laneH;
+  document.body.style.cursor = "row-resize";
+  const move = (ev: PointerEvent) => st().set({ laneH: Math.round(Math.max(44, Math.min(180, h0 + ev.clientY - y0))) });
+  const up = () => {
+    window.removeEventListener("pointermove", move);
+    window.removeEventListener("pointerup", up);
+    document.body.style.cursor = "";
+  };
+  window.addEventListener("pointermove", move);
+  window.addEventListener("pointerup", up);
+}
+
+function FxSelect({ laneId, value }: { laneId: string; value?: string }) {
+  const on = !!value && value !== "none";
+  return (
+    <label className={css.fxPill} data-on={on || undefined} data-tip="Track processing">
+      <span>{on ? FX_PRESETS.find((p) => p.id === value)?.label : "FX"}</span>
+      <select
+        value={value ?? "none"}
+        onChange={(e) => {
+          const st = useStudio.getState();
+          st.commit();
+          st.setLane(laneId, { fx: e.target.value === "none" ? undefined : e.target.value });
+        }}
+        aria-label="Track processing"
+      >
+        {FX_PRESETS.map((p) => (
+          <option key={p.id} value={p.id}>
+            {p.label}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }
