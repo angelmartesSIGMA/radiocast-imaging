@@ -9,8 +9,7 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Samples · Radiocast Imaging" };
 
 export default async function SamplesPage() {
-  const ok = supabaseConfigured();
-  const samples = ok ? await publishedSamples() : [];
+  const loaded = supabaseConfigured() ? await publishedSamples().catch((e: unknown) => ({ error: e })) : { error: undefined };
   return (
     <div className={css.container}>
       <div className={css.pageHead}>
@@ -19,7 +18,7 @@ export default async function SamplesPage() {
           <p className={css.lead}>Beds, sweeps, hits and stingers from the Radiocast team. Preview anything, then drop it straight into a new session.</p>
         </div>
       </div>
-      {ok ? <SampleBrowser samples={samples} /> : <NotConfigured />}
+      {"error" in loaded ? <NotConfigured error={loaded.error} /> : <SampleBrowser samples={loaded} />}
     </div>
   );
 }

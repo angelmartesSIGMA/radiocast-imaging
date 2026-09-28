@@ -46,6 +46,10 @@ Set these in **Vercel → Project → Settings → Environment Variables** for P
 
 If either Basic Auth variable is missing, a deployed build returns `503` instead of going public. `npm run dev` stays open without them. If Supabase isn't configured, the studio and dashboard show a setup notice instead of crashing.
 
+### Checking the setup
+
+If Supabase is missing or misconfigured, pages don't crash. They show a checklist of what's wrong: an unreachable URL, the anon key used instead of the service role key, missing tables or missing buckets. Open **`/api/health`** on the deployment to see the same checks as JSON.
+
 ### 3. Run it
 
 ```bash

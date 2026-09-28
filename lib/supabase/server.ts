@@ -8,14 +8,28 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 let client: SupabaseClient | null = null;
 
 export function supabaseConfigured() {
-  return !!(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+  if (!supabaseUrl() || !key) return false;
+  const role = jwtRole(key);
+  return !role || role === "service_role";
+}
+
+/** SUPABASE_URL, forgiving the usual paste mistakes (spaces, trailing slash, /rest/v1 suffix). */
+export function supabaseUrl() {
+  return (process.env.SUPABASE_URL ?? "")
+    .trim()
+    .replace(/\/+$/, "")
+    .replace(/\/(rest|storage|auth)\/v1$/, "");
 }
 
 export function db(): SupabaseClient {
   if (client) return client;
-  const url = process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const url = supabaseUrl();
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
   if (!url || !key) throw new NotConfigured();
+  const role = jwtRole(key);
+  if (role && role !== "service_role")
+    throw new NotConfigured(`SUPABASE_SERVICE_ROLE_KEY is the “${role}” key. Use SERVICE_ROLE_KEY, not ANON_KEY.`);
   client = createClient(url, key, {
     auth: { persistSession: false, autoRefreshToken: false },
     global: { fetch: (input, init) => fetch(input, { ...init, cache: "no-store" }) },
@@ -24,8 +38,17 @@ export function db(): SupabaseClient {
 }
 
 export class NotConfigured extends Error {
-  constructor() {
-    super("Supabase is not configured. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.");
+  constructor(message = "Supabase is not configured. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.") {
+    super(message);
+  }
+}
+
+/** The `role` claim of a Supabase JWT key (null for non-JWT keys such as sb_secret_…). */
+export function jwtRole(key: string): string | null {
+  try {
+    return (JSON.parse(Buffer.from(key.split(".")[1], "base64url").toString()) as { role?: string }).role ?? null;
+  } catch {
+    return null;
   }
 }
 

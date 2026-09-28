@@ -1,22 +1,41 @@
+import { checkSetup, explain } from "@/lib/supabase/diagnose";
 import css from "./site.module.css";
 
-/** Shown instead of data pages when the Supabase env vars are missing. */
-export function NotConfigured() {
+/**
+ * Shown instead of a data page when Supabase is missing or a query failed.
+ * Runs the setup checks so the page says exactly what to fix, instead of a
+ * generic server error.
+ */
+export async function NotConfigured({ error }: { error?: unknown }) {
+  const checks = await checkSetup().catch(() => []);
+  const failing = checks.filter((c) => !c.ok);
   return (
-    <div className={css.empty} style={{ margin: "40px 0" }}>
-      <strong>Supabase isn’t connected yet</strong>
-      <span>
-        Set <code>SUPABASE_URL</code> and <code>SUPABASE_SERVICE_ROLE_KEY</code>, run <code>supabase/migrations/0001_init.sql</code> in the SQL
-        editor, then redeploy.
-      </span>
+    <div className={css.setup}>
+      <strong>{failing.length || error ? "Supabase isn’t set up correctly" : "Supabase isn’t connected yet"}</strong>
+      {error !== undefined && !failing.length && <p className={css.setupErr}>{explain(error)}</p>}
+      <ul>
+        {checks.map((c) => (
+          <li key={c.label} data-ok={c.ok || undefined}>
+            <span aria-hidden>{c.ok ? "✓" : "✕"}</span>
+            <div>
+              {c.label}
+              {c.detail && !c.ok && <small>{c.detail}</small>}
+            </div>
+          </li>
+        ))}
+      </ul>
+      <p className={css.setupFoot}>
+        Fix it in Vercel → Settings → Environment Variables (then redeploy) or in the Supabase SQL editor, then reload. Full check as JSON:{" "}
+        <a href="/api/health">/api/health</a>
+      </p>
     </div>
   );
 }
 
-export function NotConfiguredPage() {
+export function NotConfiguredPage({ error }: { error?: unknown }) {
   return (
-    <div className="container" style={{ maxWidth: 640, margin: "0 auto", padding: "80px 24px" }}>
-      <NotConfigured />
+    <div style={{ maxWidth: 680, margin: "0 auto", padding: "80px 24px" }}>
+      <NotConfigured error={error} />
     </div>
   );
 }

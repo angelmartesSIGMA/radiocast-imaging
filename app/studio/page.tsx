@@ -12,11 +12,16 @@ export default async function NewStudio({ searchParams }: { searchParams: Promis
   const sp = await searchParams;
   const sample = sp.sample && UUID_RE.test(sp.sample) ? sp.sample : null;
   const t = TEMPLATES.find((x) => x.id === sp.template) ?? TEMPLATES.find((x) => x.id === (sample ? "blank" : "summer"))!;
-  const { data, error } = await db()
-    .from("sessions")
-    .insert({ name: t.title, target_s: t.target, data: { pendingTemplate: t.id, pendingSample: sample } })
-    .select("id")
-    .single<{ id: string }>();
-  if (error) throw new Error(error.message);
+  const res = await Promise.resolve()
+    .then(() =>
+      db()
+        .from("sessions")
+        .insert({ name: t.title, target_s: t.target, data: { pendingTemplate: t.id, pendingSample: sample } })
+        .select("id")
+        .single<{ id: string }>(),
+    )
+    .catch((e: unknown) => ({ data: null, error: e }));
+  const { data, error } = res;
+  if (error || !data) return <NotConfiguredPage error={error} />;
   redirect(`/studio/${data.id}`);
 }

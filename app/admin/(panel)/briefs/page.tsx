@@ -13,7 +13,7 @@ export default async function AdminBriefs({ searchParams }: { searchParams: Prom
   let q = db().from("briefs").select("id,ref,station,contact_email,status,created_at,deliverables").order("created_at", { ascending: false }).limit(200);
   if (valid) q = q.eq("status", valid);
   const { data, error } = await q;
-  if (error) throw new Error(error.message);
+  if (error) return <NotConfigured error={error} />;
   return (
     <>
       <div className={s.pageHead}>

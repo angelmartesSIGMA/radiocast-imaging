@@ -1,5 +1,6 @@
 import "server-only";
 import { NextResponse } from "next/server";
+import { explain } from "@/lib/supabase/diagnose";
 import { NotConfigured } from "@/lib/supabase/server";
 
 export const json = (data: unknown, status = 200) =>
@@ -14,8 +15,8 @@ export function route<A extends unknown[]>(fn: (...args: A) => Promise<Response>
       return await fn(...args);
     } catch (e) {
       if (e instanceof NotConfigured) return fail(e.message, 503);
-      const msg = e instanceof Error ? e.message : typeof e === "object" && e && "message" in e ? String(e.message) : "Unexpected error";
-      console.error("[api]", msg);
+      const msg = explain(e);
+      console.error("[api]", msg, e);
       return fail(msg, 500);
     }
   };

@@ -14,7 +14,7 @@ export default async function AdminSessions() {
     .is("deleted_at", null)
     .order("updated_at", { ascending: false })
     .limit(300);
-  if (error) throw new Error(error.message);
+  if (error) return <NotConfigured error={error} />;
   const rows = (data ?? []) as SessionRow[];
   return (
     <>

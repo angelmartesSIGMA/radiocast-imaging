@@ -13,14 +13,14 @@ type Head = ReturnType<typeof head>;
 
 async function count(table: string, f: (q: Head) => Head = (q) => q) {
   const { count: n, error } = await f(head(table));
-  if (error) throw new Error(error.message);
+  if (error) throw error;
   return n ?? 0;
 }
 
 export default async function AdminOverview() {
   if (!supabaseConfigured()) return <NotConfigured />;
   const week = new Date(Date.now() - 7 * 86400000).toISOString();
-  const [statusCounts, sessions, sessionsWeek, samples, published, assetSizes, sampleSizes, recent] = await Promise.all([
+  const loaded = await Promise.all([
     Promise.all(BRIEF_STATUSES.map(async (st) => ({ ...st, n: await count("briefs", (q) => q.eq("status", st.id)) }))),
     count("sessions", (q) => q.is("deleted_at", null)),
     count("sessions", (q) => q.is("deleted_at", null).gte("created_at", week)),
@@ -29,7 +29,9 @@ export default async function AdminOverview() {
     db().from("assets").select("size_bytes").limit(10000),
     db().from("samples").select("size_bytes").limit(10000),
     db().from("briefs").select("id,ref,station,contact_email,status,created_at,deliverables").order("created_at", { ascending: false }).limit(6),
-  ]);
+  ]).catch((e: unknown) => e as Error);
+  if (loaded instanceof Error) return <NotConfigured error={loaded} />;
+  const [statusCounts, sessions, sessionsWeek, samples, published, assetSizes, sampleSizes, recent] = loaded;
   const sum = (r: { data: { size_bytes: number | null }[] | null }) => (r.data ?? []).reduce((a, x) => a + (x.size_bytes ?? 0), 0);
   const open = statusCounts.filter((x) => x.id === "new" || x.id === "in_progress" || x.id === "needs_info").reduce((a, x) => a + x.n, 0);
 

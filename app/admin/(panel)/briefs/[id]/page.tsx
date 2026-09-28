@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { NotConfigured } from "@/components/site/NotConfigured";
 import { StatusChip } from "@/components/site/StatusChip";
 import s from "@/components/site/site.module.css";
 import { UUID_RE } from "@/lib/api";
@@ -7,19 +8,20 @@ import { fxLabel } from "@/lib/audio/fx";
 import type { BriefEventRow, BriefFileRow, BriefRow } from "@/lib/db/types";
 import { BRIEF_STATUSES } from "@/lib/db/types";
 import { ago, bytes, dur } from "@/lib/format-site";
-import { BUCKETS, db, signedUrl } from "@/lib/supabase/server";
+import { BUCKETS, db, signedUrl, supabaseConfigured } from "@/lib/supabase/server";
 import { Deliveries, NotesForm, StatusForm } from "./client";
 import css from "../../../admin.module.css";
 
 export default async function BriefDetail({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   if (!UUID_RE.test(id)) notFound();
+  if (!supabaseConfigured()) return <NotConfigured />;
   const [{ data: b, error }, { data: events }, { data: files }] = await Promise.all([
     db().from("briefs").select("*").eq("id", id).maybeSingle<BriefRow>(),
     db().from("brief_events").select("*").eq("brief_id", id).order("created_at", { ascending: false }),
     db().from("brief_files").select("*").eq("brief_id", id).order("created_at"),
   ]);
-  if (error) throw new Error(error.message);
+  if (error) return <NotConfigured error={error} />;
   if (!b) notFound();
   const mixUrl = b.mix_path ? await signedUrl(BUCKETS.briefs, b.mix_path).catch(() => null) : null;
   const fileRows = (files ?? []) as BriefFileRow[];

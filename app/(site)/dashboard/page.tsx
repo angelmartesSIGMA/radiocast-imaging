@@ -25,7 +25,7 @@ async function load() {
     db().from("briefs").select("*, brief_files(*)").order("created_at", { ascending: false }).limit(50),
     db().from("assets").select("*").eq("uploaded", true).order("created_at", { ascending: false }).limit(50),
   ]);
-  for (const r of [sessions, briefs, assets]) if (r.error) throw new Error(r.error.message);
+  for (const r of [sessions, briefs, assets]) if (r.error) throw r.error;
   const brs = (briefs.data ?? []) as BriefWithFiles[];
   const paths = brs.flatMap((b) => b.brief_files.map((f) => f.path));
   const signed = paths.length ? (await db().storage.from(BUCKETS.briefs).createSignedUrls(paths, 3600)).data ?? [] : [];
@@ -48,7 +48,17 @@ export default async function Dashboard() {
         <NotConfigured />
       </div>
     );
-  const { sessions, briefs, urls, assets } = await load();
+  const loaded = await load().catch((e: unknown) => ({ error: e }));
+  if ("error" in loaded)
+    return (
+      <div className={css.container}>
+        <div className={css.pageHead}>
+          <h1 className={css.h1}>Dashboard</h1>
+        </div>
+        <NotConfigured error={loaded.error} />
+      </div>
+    );
+  const { sessions, briefs, urls, assets } = loaded;
 
   return (
     <div className={css.container}>
