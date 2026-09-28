@@ -7,7 +7,7 @@ import { HEADER_W, TRACK_TYPES } from "@/lib/studio/constants";
 import { fmt, fmtDb, fmtSec, fmtShort } from "@/lib/studio/format";
 import { FX_PRESETS } from "@/lib/audio/fx";
 import { laneColor } from "@/lib/studio/colors";
-import { useStudio } from "@/lib/studio/store";
+import { NEW_LANE, useStudio } from "@/lib/studio/store";
 import { TEMPLATES } from "@/lib/studio/templates";
 import type { Clip, ClipHandle, Lane, Sound } from "@/lib/studio/types";
 import { Icon } from "@/components/ui/Icon";
@@ -88,6 +88,37 @@ export function Timeline() {
     [],
   );
   useEffect(() => clock.set(clock.t), [pps]);
+
+  // Auto-scroll when dragging a clip, sound or track near the edge of the timeline.
+  useEffect(() => {
+    let raf = 0;
+    let px = 0;
+    let py = 0;
+    const onMove = (e: PointerEvent) => {
+      px = e.clientX;
+      py = e.clientY;
+    };
+    const step = () => {
+      const st = useStudio.getState();
+      const sc = scrollRef.current;
+      if (sc && (st.drag || st.clipDrag || st.laneDrag || st.activeClip)) {
+        const r = sc.getBoundingClientRect();
+        const edge = 48;
+        const speed = (d: number) => Math.ceil(((edge - d) / edge) * 18);
+        if (px > r.right - edge && px < r.right + 80) sc.scrollLeft += speed(r.right - px);
+        else if (px < r.left + HEADER_W + edge && px > r.left + HEADER_W - 80) sc.scrollLeft -= speed(px - r.left - HEADER_W);
+        if (py > r.bottom - edge && py < r.bottom + 80) sc.scrollTop += speed(r.bottom - py);
+        else if (py < r.top + 30 + edge && py > r.top - 40) sc.scrollTop -= speed(py - r.top - 30);
+      }
+      raf = requestAnimationFrame(step);
+    };
+    window.addEventListener("pointermove", onMove);
+    raf = requestAnimationFrame(step);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      cancelAnimationFrame(raf);
+    };
+  }, []);
 
   // Per-track level meters in the track headers.
   useEffect(() => {
@@ -203,8 +234,9 @@ export function Timeline() {
           {s.lanes.map((l) => (
             <LaneRow key={l.id} lane={l} audible={anySolo ? l.solo : !l.mute} trackW={trackW} majorPx={major * pps} />
           ))}
+          {s.laneDrag && <div className={css.laneDropLine} style={{ top: 30 + s.laneDrag.index * laneH - 1 }} />}
 
-          {/* add track row */}
+          {/* add-track buttons + "drop here for a new track" zone */}
           <div className={css.addRow}>
             <div className={css.addCell}>
               {(["voice", "bed", "fx"] as const).map((t) => (
@@ -220,6 +252,7 @@ export function Timeline() {
                 </button>
               ))}
             </div>
+            <NewTrackZone trackW={trackW} />
           </div>
 
           {/* overlays: target region, playhead, snap line */}
@@ -291,6 +324,7 @@ const LaneRow = memo(function LaneRow({
   const renaming = useStudio((s) => s.renaming === lane.id);
   const siblings = useStudio((s) => s.lanes.filter((x) => x.type === lane.type).length);
   const compact = useStudio((s) => s.laneH < 62);
+  const laneDragging = useStudio((s) => s.laneDrag?.id === lane.id);
   const st = useStudio.getState;
 
   const act = clips.find((c) => c.id === activeClip);
@@ -300,6 +334,8 @@ const LaneRow = memo(function LaneRow({
   return (
     <div
       className={css.lane}
+      data-lane-row={lane.id}
+      data-reordering={laneDragging || undefined}
       style={{ "--c": LC.color } as React.CSSProperties}
       data-muted={!audible || undefined}
       data-compact={compact || undefined}
@@ -319,7 +355,11 @@ const LaneRow = memo(function LaneRow({
           <span data-lane-meter={lane.id} />
         </span>
         <div className={css.laneTitle}>
-          <span className={css.laneIcon}>
+          <span
+            className={css.laneIcon}
+            onPointerDown={(e) => startLaneDrag(e, lane.id)}
+            data-tip="Drag to reorder tracks"
+          >
             <Icon name={lane.type === "voice" ? "mic" : lane.type === "bed" ? "music" : "bolt"} size={12} />
           </span>
           {renaming ? (
@@ -520,6 +560,7 @@ function ClipView({
   pps: number;
 }) {
   const [hover, setHover] = useState(false);
+  const leaving = useStudio((s) => s.ghost?.lane === NEW_LANE && s.clipDrag);
   const w = Math.max(8, c.len * pps);
   const fi = (c.fadeIn / c.len) * 100;
   const fo = (c.fadeOut / c.len) * 100;
@@ -538,13 +579,18 @@ function ClipView({
     st().set({ selected: c.id, menu: null });
     document.body.style.cursor = mode === "move" ? "grabbing" : "ew-resize";
 
+    const y0 = e.clientY;
+    const laneType = st().lanes.find((l) => l.id === c.lane)?.type;
+    const room = st().roomFor(c.id);
+    let toNew = false;
     const move = (ev: PointerEvent) => {
       const p = st().pps;
       const dt = (ev.clientX - x0) / p;
       if (!moved) {
-        if (Math.abs(ev.clientX - x0) < 3) return;
+        if (Math.hypot(ev.clientX - x0, ev.clientY - y0) < 3) return;
         moved = true;
         st().commit();
+        if (mode === "move") st().set({ clipDrag: true });
       }
       let patch: Partial<Clip> = {};
       let snapT: number | null = null;
@@ -554,18 +600,23 @@ function ClipView({
         snapT = r.snapT;
         patch.start = r.t;
         const tr = trackAt(ev.clientX, ev.clientY);
-        if (tr) patch.lane = tr;
-        tag = fmt(r.t);
+        toNew = tr === NEW_LANE;
+        if (tr && !toNew) patch.lane = tr;
+        st().set({ ghost: toNew ? { lane: NEW_LANE, start: r.t, len: c0.len, type: laneType } : null });
+        const cur = st().clips.find((x) => x.id === c.id)!;
+        const hits = !toNew && st().overlaps(patch.lane ?? cur.lane, r.t, r.t + c0.len, c.id);
+        tag = toNew ? `${fmt(r.t)} · new track` : hits ? `${fmt(r.t)} · overlaps — moves to a free track` : fmt(r.t);
       } else if (mode === "trimL") {
         const r = st().snapTime(c0.start + dt, 0, c.id);
-        const ns = Math.max(c0.start - c0.offset, Math.min(r.t, c0.start + c0.len - 0.1));
+        // Stop at the previous clip rather than sliding underneath it.
+        const ns = Math.max(c0.start - c0.offset, room[0], Math.min(r.t, c0.start + c0.len - 0.1));
         snapT = ns === r.t ? r.snapT : null;
         const d = ns - c0.start;
         patch = { start: ns, offset: c0.offset + d, len: c0.len - d, fadeIn: Math.min(c0.fadeIn, c0.len - d) };
         tag = fmtSec(patch.len!);
       } else if (mode === "trimR") {
         const r = st().snapTime(c0.start + c0.len + dt, 0, c.id);
-        const ne = Math.max(c0.start + 0.1, Math.min(r.t, c0.start + (snd.dur - c0.offset)));
+        const ne = Math.max(c0.start + 0.1, Math.min(r.t, c0.start + (snd.dur - c0.offset), room[1]));
         snapT = ne === r.t ? r.snapT : null;
         patch = { len: ne - c0.start, fadeOut: Math.min(c0.fadeOut, ne - c0.start) };
         tag = fmtSec(patch.len!);
@@ -583,7 +634,14 @@ function ClipView({
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
       document.body.style.cursor = "";
-      st().set({ snapT: null, tag: null, activeClip: null });
+      st().set({ snapT: null, tag: null, activeClip: null, clipDrag: false, ghost: null });
+      if (moved && mode === "move") {
+        if (toNew && laneType) {
+          const l = st().createLane(laneType);
+          st().updateClip(c.id, { lane: l.id }, false);
+          st().toastMsg(`Moved to a new track, “${l.label}”`, laneColor(l, st().lanes).color);
+        } else st().placeClip(c.id);
+      }
       if (moved) st().restartIfPlaying();
     };
     window.addEventListener("pointermove", move);
@@ -611,7 +669,7 @@ function ClipView({
       style={{
         left: c.start * pps,
         width: w,
-        opacity: audible ? 1 : 0.35,
+        opacity: active && leaving ? 0.3 : audible ? 1 : 0.35,
       }}
     >
       {w >= 40 && (
@@ -700,4 +758,105 @@ function FxSelect({ laneId, value }: { laneId: string; value?: string }) {
       </select>
     </label>
   );
+}
+
+/** Space below the last track. Drop a clip, sound or file here to create a track for it. */
+function NewTrackZone({ trackW }: { trackW: number }) {
+  const ghost = useStudio((s) => (s.ghost?.lane === NEW_LANE ? s.ghost : null));
+  const fileMark = useStudio((s) => (s.fileMark?.lane === NEW_LANE ? s.fileMark : null));
+  const active = useStudio((s) => !!s.drag || s.fileDrag || s.clipDrag);
+  const pps = useStudio((s) => s.pps);
+  const st = useStudio.getState;
+  const color = ghost?.type ? TRACK_TYPES[ghost.type].color : "var(--accent)";
+
+  return (
+    <div
+      className={css.newZone}
+      data-track={NEW_LANE}
+      data-active={active || undefined}
+      data-over={ghost || fileMark ? true : undefined}
+      style={{ width: trackW, "--c": color } as React.CSSProperties}
+      onDragOver={(e) => {
+        if (!e.dataTransfer.types.includes("Files")) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "copy";
+        const r = e.currentTarget.getBoundingClientRect();
+        const at = st().snapTime((e.clientX - r.left) / pps, 0, null).t;
+        const fm = st().fileMark;
+        if (!fm || fm.lane !== NEW_LANE || Math.abs(fm.at - at) > 0.001) st().set({ fileMark: { lane: NEW_LANE, at } });
+      }}
+      onDragLeave={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node) && st().fileMark?.lane === NEW_LANE) st().set({ fileMark: null });
+      }}
+      onDrop={(e) => {
+        if (!e.dataTransfer.types.includes("Files")) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const r = e.currentTarget.getBoundingClientRect();
+        const at = st().snapTime((e.clientX - r.left) / pps, 0, null).t;
+        window.dispatchEvent(new Event("studio:filedrop-reset"));
+        void st().importFiles(Array.from(e.dataTransfer.files), { lane: NEW_LANE, at });
+      }}
+    >
+      {active && !ghost && !fileMark && (
+        <div className={css.newHint}>
+          <Icon name="plus" size={12} strokeWidth={2.4} />
+          Drop here for a new track
+        </div>
+      )}
+      {ghost && (
+        <div className={css.ghost} style={{ left: ghost.start * pps, width: Math.max(8, ghost.len * pps) }}>
+          <span className={css.ghostLabel}>New {ghost.type ? TRACK_TYPES[ghost.type].label : ""} track</span>
+        </div>
+      )}
+      {fileMark && (
+        <div className={css.ghost} style={{ left: fileMark.at * pps, width: 140 }}>
+          <span className={css.ghostLabel}>New track</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Drag a track's icon up or down to reorder tracks. */
+function startLaneDrag(e: React.PointerEvent, id: string) {
+  if (e.button !== 0) return;
+  e.preventDefault();
+  e.stopPropagation();
+  const st = useStudio.getState;
+  const y0 = e.clientY;
+  let active = false;
+  const indexAt = (y: number) => {
+    const rows = Array.from(document.querySelectorAll<HTMLElement>("[data-lane-row]"));
+    let i = rows.length;
+    for (let k = 0; k < rows.length; k++) {
+      const r = rows[k].getBoundingClientRect();
+      if (y < r.top + r.height / 2) {
+        i = k;
+        break;
+      }
+    }
+    return i;
+  };
+  const move = (ev: PointerEvent) => {
+    if (!active) {
+      if (Math.abs(ev.clientY - y0) < 4) return;
+      active = true;
+      document.body.style.cursor = "grabbing";
+    }
+    st().set({ laneDrag: { id, index: indexAt(ev.clientY) } });
+  };
+  const up = () => {
+    window.removeEventListener("pointermove", move);
+    window.removeEventListener("pointerup", up);
+    document.body.style.cursor = "";
+    const d = st().laneDrag;
+    st().set({ laneDrag: null });
+    if (!d) return;
+    const from = st().lanes.findIndex((l) => l.id === d.id);
+    // Insertion index counts the dragged lane itself; adjust when moving down.
+    st().moveLane(d.id, d.index > from ? d.index - 1 : d.index);
+  };
+  window.addEventListener("pointermove", move);
+  window.addEventListener("pointerup", up);
 }

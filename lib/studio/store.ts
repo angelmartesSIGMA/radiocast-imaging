@@ -6,6 +6,7 @@ import { encodeWav, wavePath } from "@/lib/audio/dsp";
 import { AudioEngine, getEngine } from "@/lib/audio/engine";
 import { applyGain, limit, measureLufs, peakOf } from "@/lib/audio/loudness";
 import { clock, dom } from "./clock";
+import { laneColor } from "./colors";
 import { audioStore } from "./idb";
 import { defaultLanes, LANE_IDS, TEMPLATES } from "./templates";
 import { COLORS, HEADER_W, SCALES, TRACK_TYPES, VOICES } from "./constants";
@@ -21,10 +22,15 @@ export interface LibDrag {
   x: number;
   y: number;
 }
+/** Drop target id for "make a new track here" (the space below the last track). */
+export const NEW_LANE = "__new__";
+
 export interface Ghost {
   lane: string;
   start: number;
   len: number;
+  /** Track type a new lane would get when `lane` is NEW_LANE. */
+  type?: TrackType;
 }
 export interface ContextMenu {
   clipId: string;
@@ -95,6 +101,10 @@ export interface StudioState {
   // interaction
   drag: LibDrag | null;
   ghost: Ghost | null;
+  /** A clip is being dragged (move mode) — shows the new-track drop zone. */
+  clipDrag: boolean;
+  /** Track being dragged to reorder, and where it would land. */
+  laneDrag: { id: string; index: number } | null;
   snapT: number | null;
   tag: string | null;
   activeClip: string | null;
@@ -145,7 +155,14 @@ interface Actions {
   stopPreview(): void;
 
   snapTime(t: number, len: number, exclude: string | null): { t: number; snapT: number | null };
-  addClip(soundId: string, lane?: string | null, start?: number): void;
+  addClip(soundId: string, lane?: string | null, start?: number, opts?: { noCommit?: boolean; quiet?: boolean }): string | null;
+  /** Move a clip off anything it overlaps: to a free track of the same kind, or a new one. */
+  placeClip(id: string, quiet?: boolean): void;
+  /** Free space around a clip in its lane: [earliest start, latest end]. */
+  roomFor(id: string): [number, number];
+  overlaps(lane: string, start: number, end: number, exclude?: string | null): boolean;
+  createLane(type: TrackType, afterId?: string): Lane;
+  moveLane(id: string, toIndex: number): void;
   removeClip(id: string): void;
   updateClip(id: string, patch: Partial<Clip>, restart?: boolean): void;
   duplicate(id?: string | null): void;
@@ -233,6 +250,8 @@ export const useStudio = create<Studio>()(
 
       drag: null,
       ghost: null,
+      clipDrag: false,
+      laneDrag: null,
       snapT: null,
       tag: null,
       activeClip: null,
@@ -285,6 +304,8 @@ export const useStudio = create<Studio>()(
         bumpIds(restored.map((x) => x.id));
         const known = new Set([...sounds, ...restored].map((x) => x.id));
         set((cur) => ({ sounds: [...cur.sounds, ...restored], clips: cur.clips.filter((c) => known.has(c.soundId)) }));
+        // Older sessions could stack clips on one track; spread any overlaps onto their own tracks.
+        for (const c of get().clips) get().placeClip(c.id, true);
       },
 
       newSession(templateId) {
@@ -458,14 +479,15 @@ export const useStudio = create<Studio>()(
         return { t: Math.max(0, t), snapT: null };
       },
 
-      addClip(soundId, lane, start) {
+      addClip(soundId, lane, start, opts) {
         const s = get();
         const snd = s.sounds.find((x) => x.id === soundId);
-        if (!snd) return;
+        if (!snd) return null;
+        if (!opts?.noCommit) s.commit();
         const l =
-          s.lanes.find((x) => x.id === lane) ??
-          s.lanes.find((x) => x.type === snd.type) ??
-          s.lanes[0];
+          lane === NEW_LANE
+            ? s.createLane(snd.type)
+            : get().lanes.find((x) => x.id === lane) ?? get().lanes.find((x) => x.type === snd.type) ?? get().lanes[0];
         const bed = l.type === "bed";
         const c: Clip = {
           id: uid("c"),
@@ -478,10 +500,92 @@ export const useStudio = create<Studio>()(
           fadeIn: 0,
           fadeOut: bed ? Math.min(1, snd.dur / 4) : 0,
         };
-        s.commit();
         set({ clips: [...get().clips, c], selected: c.id });
+        get().placeClip(c.id, opts?.quiet);
         get().restartIfPlaying();
+        return c.id;
       },
+
+      overlaps(lane, start, end, exclude) {
+        return get().clips.some((o) => o.lane === lane && o.id !== exclude && start < o.start + o.len - 1e-3 && end > o.start + 1e-3);
+      },
+
+      roomFor(id) {
+        const s = get();
+        const c = s.clips.find((x) => x.id === id);
+        if (!c) return [0, Infinity];
+        let lo = 0;
+        let hi = Infinity;
+        for (const o of s.clips) {
+          if (o.lane !== c.lane || o.id === id) continue;
+          const oEnd = o.start + o.len;
+          if (oEnd <= c.start + 1e-3) lo = Math.max(lo, oEnd);
+          else if (o.start >= c.start + c.len - 1e-3) hi = Math.min(hi, o.start);
+        }
+        return [lo, hi];
+      },
+
+      placeClip(id, quiet) {
+        const s = get();
+        const c = s.clips.find((x) => x.id === id);
+        if (!c || !s.overlaps(c.lane, c.start, c.start + c.len, id)) return;
+        const lane = s.lanes.find((l) => l.id === c.lane);
+        if (!lane) return;
+        const i = s.lanes.indexOf(lane);
+        // Nearest same-type track below, then above, that has room.
+        const order = [...s.lanes.slice(i + 1), ...s.lanes.slice(0, i).reverse()];
+        let dest = order.find((l) => l.type === lane.type && !s.overlaps(l.id, c.start, c.start + c.len, id));
+        const created = !dest;
+        if (!dest) dest = s.createLane(lane.type, lane.id);
+        set((st) => ({ clips: st.clips.map((x) => (x.id === id ? { ...x, lane: dest!.id } : x)) }));
+        if (!quiet)
+          get().toastMsg(
+            created ? `Overlapping clip moved to a new track, “${dest.label}”` : `Overlapping clip moved to “${dest.label}”`,
+            laneColor(dest, get().lanes).color,
+            undoAction(),
+          );
+      },
+
+      createLane(type, afterId) {
+        const s = get();
+        const same = s.lanes.filter((l) => l.type === type);
+        const n = same.length;
+        // Next free name and a hue nobody of this type is using yet.
+        let num = n + 1;
+        while (s.lanes.some((l) => l.label === `${TRACK_TYPES[type].label} ${num}`)) num++;
+        const used = new Set(same.map((l, i) => l.hue ?? i));
+        let hue = 0;
+        while (used.has(hue) && hue < 8) hue++;
+        const l: Lane = {
+          id: uid("L"),
+          type,
+          hue,
+          label: n ? `${TRACK_TYPES[type].label} ${num}` : TRACK_TYPES[type].label,
+          fx: type === "voice" ? "broadcast" : undefined,
+          gain: 0,
+          mute: false,
+          solo: false,
+        };
+        const at = afterId ? s.lanes.findIndex((x) => x.id === afterId) + 1 : s.lanes.length;
+        const lanes = [...s.lanes];
+        lanes.splice(at <= 0 ? lanes.length : at, 0, l);
+        set({ lanes });
+        return l;
+      },
+
+      moveLane(id, toIndex) {
+        const s = get();
+        const from = s.lanes.findIndex((l) => l.id === id);
+        if (from < 0) return;
+        const to = clamp(toIndex, 0, s.lanes.length - 1);
+        if (to === from) return;
+        s.commit();
+        const lanes = [...s.lanes];
+        const [l] = lanes.splice(from, 1);
+        lanes.splice(to, 0, l);
+        set({ lanes });
+      },
+
       removeClip(id) {
         const s = get();
         const c = s.clips.find((x) => x.id === id);
@@ -493,6 +597,8 @@ export const useStudio = create<Studio>()(
       },
       updateClip(id, patch, restart = true) {
         set((st) => ({ clips: st.clips.map((c) => (c.id === id ? { ...c, ...patch } : c)) }));
+        // Finished edits (not live drags) that move a clip must not leave it hidden under another.
+        if (restart && (patch.start != null || patch.lane != null || patch.len != null)) get().placeClip(id);
         if (restart) get().restartIfPlaying();
       },
       duplicate(id) {
@@ -502,6 +608,7 @@ export const useStudio = create<Studio>()(
         const n = { ...c, id: uid("c"), start: c.start + c.len };
         s.commit();
         set((st) => ({ clips: [...st.clips, n], selected: n.id, menu: null }));
+        get().placeClip(n.id);
         get().restartIfPlaying();
       },
       toggleReverse(id) {
@@ -547,19 +654,8 @@ export const useStudio = create<Studio>()(
       },
 
       addLane(type) {
-        const s = get();
-        const n = s.lanes.filter((l) => l.type === type).length;
-        const l: Lane = {
-          id: uid("L"),
-          type,
-          label: n ? `${TRACK_TYPES[type].label} ${n + 1}` : TRACK_TYPES[type].label,
-          fx: type === "voice" ? "broadcast" : undefined,
-          gain: 0,
-          mute: false,
-          solo: false,
-        };
-        s.commit();
-        set({ lanes: [...get().lanes, l] });
+        get().commit();
+        get().createLane(type);
       },
       setLane(id, patch, restart = true) {
         set((st) => ({ lanes: st.lanes.map((l) => (l.id === id ? { ...l, ...patch } : l)) }));
@@ -615,14 +711,23 @@ export const useStudio = create<Studio>()(
           return;
         }
         let at = target && target !== "library" ? target.at : clock.t;
+        // Several files dropped on the "new track" zone share the one track they create.
+        let targetLane = target && target !== "library" ? target.lane : null;
         for (const f of audio) {
           try {
             const buf = await getEngine().decode(await f.arrayBuffer());
-            const laneObj = target && target !== "library" ? get().lanes.find((l) => l.id === target.lane) : undefined;
+            const laneObj = targetLane ? get().lanes.find((l) => l.id === targetLane) : undefined;
             const type: TrackType = laneObj ? laneObj.type : buf.duration > 10 ? "bed" : "voice";
             const lane =
-              target === "library" ? null : laneObj ? laneObj.id : get().lanes.find((l) => l.type === type)?.id ?? null;
-            addUserSound(buf, f, f.name.replace(/\.[^.]+$/, ""), "Upload", type, lane, at);
+              target === "library"
+                ? null
+                : targetLane === NEW_LANE
+                  ? NEW_LANE
+                  : laneObj
+                    ? laneObj.id
+                    : get().lanes.find((l) => l.type === type)?.id ?? null;
+            const placed = addUserSound(buf, f, f.name.replace(/\.[^.]+$/, ""), "Upload", type, lane, at);
+            if (targetLane === NEW_LANE && placed) targetLane = placed;
             at += buf.duration;
           } catch {
             get().toastMsg(`Couldn’t read ${f.name}`, COLORS.red);
@@ -821,8 +926,13 @@ function addUserSound(buf: AudioBuffer, blob: Blob, name: string, kind: string, 
   useStudio.setState((st) => ({ sounds: [...st.sounds, s] }));
   const st = useStudio.getState();
   if (lane) {
-    st.addClip(id, lane, at);
-    const l = useStudio.getState().lanes.find((x) => x.id === lane)!;
-    st.toastMsg(`“${name}” placed on ${l.label} at ${fmt(at)}`, TRACK_TYPES[l.type].color);
-  } else st.toastMsg(`“${name}” saved to Your audio`, TRACK_TYPES[type].color);
+    const clipId = st.addClip(id, lane, at, { quiet: true });
+    const after = useStudio.getState();
+    const c = after.clips.find((x) => x.id === clipId);
+    const l = c && after.lanes.find((x) => x.id === c.lane);
+    if (l) st.toastMsg(`“${name}” placed on ${l.label} at ${fmt(at)}`, laneColor(l, after.lanes).color, undoAction());
+    return l?.id ?? null;
+  }
+  st.toastMsg(`“${name}” saved to Your audio`, TRACK_TYPES[type].color);
+  return null;
 }

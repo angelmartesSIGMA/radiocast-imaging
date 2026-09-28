@@ -83,6 +83,14 @@ It's a port of `design/imaging-studio-v2.reference.html` with these additions:
 - **Loudness.** The export target can be off, −23, −16, −14 or −10 LUFS. Export normalizes to the target (BS.1770 K-weighting, gated), then runs a look-ahead limiter to a −1 dBFS ceiling. Measured against pyloudnorm, the difference was 0.03 LU. **Measure** shows the loudness of the current mix.
 - **New sounds:** cinematic boom, downlifter, tape stop, rewind and radio tune. The templates use them, and set track FX where it helps (hall on the liner's chime, echo on the sweeper's tail).
 
+### Arranging
+
+- **No hidden overlaps.** A clip dropped, moved, duplicated or recorded on top of another clip on the same track goes to the nearest same-type track with room, or to a new track created just below. A toast says where it went and offers Undo. Trims and arrow-key nudges stop at the neighbouring clip. Sessions saved before this change are spread out when they load.
+- **Drop below the tracks to make a new one.** Dragging a clip, a library sound or an audio file into the space under the last track creates a new track of the right type and places the audio there. A dashed zone and a preview show where it will land.
+- **Reorder tracks** by dragging a track's icon. A line shows where the track will land.
+- Tracks keep their colour for life, so inserting a track never reshuffles colours.
+- The timeline auto-scrolls when you drag near its edges.
+
 ### Interaction and usability pass
 
 - **Command palette (⌘K).** Search and run any action, add any sound at the playhead, start a template or set a target length.

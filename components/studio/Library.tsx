@@ -174,7 +174,7 @@ function SoundRow({ s, previewing, dragging }: { s: Sound; previewing: boolean; 
       let snapT = null;
       if (tr) {
         const r = st().snapTime((ev.clientX - tr.rect.left) / st().pps - Math.min(0.3, s.dur * 0.1), s.dur, null);
-        ghost = { lane: tr.id, start: r.t, len: s.dur };
+        ghost = { lane: tr.id, start: r.t, len: s.dur, type: s.type };
         snapT = r.snapT;
       }
       st().set({ drag: { soundId: s.id, name: s.name, type: s.type, x: ev.clientX, y: ev.clientY }, ghost, snapT });

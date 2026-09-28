@@ -189,7 +189,11 @@ function handleKey(e: KeyboardEvent) {
     const c = s.clips.find((x) => x.id === sel);
     if (!c) return;
     if (!e.repeat) s.commit();
-    s.updateClip(sel, { start: Math.max(0, +(c.start + step).toFixed(3)) });
+    // Nudging stops at the neighbouring clip instead of sliding under it.
+    const [lo, hi] = s.roomFor(sel);
+    const start = Math.min(Math.max(lo, +(c.start + step).toFixed(3)), hi - c.len);
+    s.updateClip(sel, { start: Math.max(0, start) }, false);
+    s.restartIfPlaying();
   } else if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && tag !== "input") {
     e.preventDefault();
     s.seek(clock.t + (e.shiftKey ? 1 : s.scale()[1]) * (e.key === "ArrowLeft" ? -1 : 1));

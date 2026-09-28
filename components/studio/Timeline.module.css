@@ -17,6 +17,8 @@
 }
 .inner {
   position: relative;
+  display: flex;
+  flex-direction: column;
   min-width: 100%;
   min-height: 100%;
 }
@@ -457,8 +459,12 @@
   justify-content: center;
 }
 .ghostLabel {
+  padding: 0 6px;
   font-size: 11px;
   font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .recBlock {
   position: absolute;
@@ -495,7 +501,8 @@
 /* ── add-track row ─────────────────────────────────── */
 .addRow {
   display: flex;
-  height: 48px;
+  flex: 1;
+  min-height: max(64px, var(--lane-h, 68px));
 }
 .addCell {
   position: sticky;
@@ -504,9 +511,9 @@
   width: 208px;
   flex-shrink: 0;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 2px;
-  padding: 0 10px;
+  padding: 12px 10px 0;
   border-right: 1px solid var(--line);
   background: var(--panel);
 }
@@ -774,4 +781,68 @@
   letter-spacing: 0.04em;
   line-height: 13px;
   color: #fff;
+}
+
+/* ── new-track drop zone (below the last track) ────── */
+.newZone {
+  position: relative;
+  flex-shrink: 0;
+}
+.newZone[data-active]::before {
+  content: "";
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  top: 6px;
+  height: calc(var(--lane-h, 68px) - 12px);
+  border: 1.5px dashed var(--line-3);
+  border-radius: 9px;
+  transition: border-color 0.12s, background 0.12s;
+}
+.newZone[data-over]::before {
+  border-color: var(--c);
+  background: color-mix(in srgb, var(--c) 7%, transparent);
+}
+.newZone .ghost {
+  top: 6px;
+  bottom: auto;
+  height: calc(var(--lane-h, 68px) - 12px);
+}
+.newHint {
+  position: sticky;
+  left: 224px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: var(--lane-h, 68px);
+  padding-left: 16px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--fg-2);
+  pointer-events: none;
+  white-space: nowrap;
+}
+.newZone[data-over] .newHint {
+  color: var(--fg);
+}
+
+/* ── track reordering ──────────────────────────────── */
+.laneIcon {
+  cursor: grab;
+}
+.laneIcon:active {
+  cursor: grabbing;
+}
+.lane[data-reordering] {
+  opacity: 0.45;
+}
+.laneDropLine {
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 9;
+  height: 2px;
+  background: var(--accent);
+  box-shadow: 0 0 8px var(--accent);
+  pointer-events: none;
 }

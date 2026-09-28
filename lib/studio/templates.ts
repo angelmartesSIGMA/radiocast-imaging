@@ -29,10 +29,10 @@ export const LANE_IDS: Record<LaneKey, string> = { voice: "L1", bed: "L2", fx: "
 
 export function defaultLanes(fx?: Partial<Record<LaneKey, string>>): Lane[] {
   const lanes: Lane[] = [
-    { id: "L1", type: "voice", label: "Voice", gain: 0, mute: false, solo: false, fx: "broadcast" },
-    { id: "L2", type: "bed", label: "Music bed", gain: 0, mute: false, solo: false },
-    { id: "L3", type: "fx", label: "FX", gain: 0, mute: false, solo: false },
-    { id: "L4", type: "fx", label: "FX 2", gain: 0, mute: false, solo: false },
+    { id: "L1", type: "voice", label: "Voice", gain: 0, mute: false, solo: false, fx: "broadcast", hue: 0 },
+    { id: "L2", type: "bed", label: "Music bed", gain: 0, mute: false, solo: false, hue: 0 },
+    { id: "L3", type: "fx", label: "FX", gain: 0, mute: false, solo: false, hue: 0 },
+    { id: "L4", type: "fx", label: "FX 2", gain: 0, mute: false, solo: false, hue: 1 },
   ];
   if (fx) for (const [k, v] of Object.entries(fx)) {
     const l = lanes.find((x) => x.id === LANE_IDS[k as LaneKey]);

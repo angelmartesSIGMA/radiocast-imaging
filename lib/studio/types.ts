@@ -40,6 +40,8 @@ export interface Lane {
   solo: boolean;
   /** Track processing preset id (see lib/audio/fx.ts). */
   fx?: string;
+  /** Index into the type's colour family, fixed at creation so colours never reshuffle. */
+  hue?: number;
 }
 
 export interface MixSnapshot {

@@ -20,9 +20,9 @@ const withAlpha = (hex: string, a: number) =>
     .toString(16)
     .padStart(2, "0")}`;
 
-export function laneColor(lane: Pick<Lane, "id" | "type">, lanes: Pick<Lane, "id" | "type">[]): LaneColor {
+export function laneColor(lane: Pick<Lane, "id" | "type" | "hue">, lanes: Pick<Lane, "id" | "type">[]): LaneColor {
   const fam = FAMILIES[lane.type];
-  const idx = Math.max(0, lanes.filter((l) => l.type === lane.type).findIndex((l) => l.id === lane.id));
+  const idx = lane.hue ?? Math.max(0, lanes.filter((l) => l.type === lane.type).findIndex((l) => l.id === lane.id));
   const color = fam[idx % fam.length];
   return { color, soft: withAlpha(color, 0.16), wash: withAlpha(color, 0.05) };
 }
