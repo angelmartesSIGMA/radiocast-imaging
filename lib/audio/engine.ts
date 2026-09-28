@@ -140,7 +140,7 @@ export class AudioEngine {
     }
 
     for (const c of clips) {
-      if (!audible(c.lane)) continue;
+      if (!audible(c.lane) || c.muted) continue;
       const buf = this.bufferFor(c.soundId, !!c.reverse);
       if (!buf) continue;
       const end = c.start + c.len;
@@ -188,6 +188,23 @@ export class AudioEngine {
   }
 
   /** Longest effect tail across the mix, so renders don’t cut reverbs off. */
+  /** Peak (linear) of the part of a source a clip actually plays. */
+  clipPeak(soundId: string, reverse: boolean, offset: number, len: number): number {
+    const buf = this.bufferFor(soundId, reverse);
+    if (!buf) return 0;
+    const a = Math.max(0, Math.floor(offset * buf.sampleRate));
+    const b = Math.min(buf.length, Math.ceil((offset + len) * buf.sampleRate));
+    let m = 0;
+    for (let c = 0; c < buf.numberOfChannels; c++) {
+      const d = buf.getChannelData(c);
+      for (let i = a; i < b; i++) {
+        const v = Math.abs(d[i]);
+        if (v > m) m = v;
+      }
+    }
+    return m;
+  }
+
   static tail(mix: MixSnapshot) {
     return mix.lanes.reduce((m, l) => Math.max(m, fxTail(l.fx)), 0);
   }

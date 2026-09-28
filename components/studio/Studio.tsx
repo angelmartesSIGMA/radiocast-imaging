@@ -170,6 +170,16 @@ function handleKey(e: KeyboardEvent) {
   } else if (mod && key === "d") {
     e.preventDefault();
     s.duplicate();
+  } else if (mod && key === "c" && sel) {
+    e.preventDefault();
+    s.copyClip();
+  } else if (mod && key === "x" && sel) {
+    e.preventDefault();
+    s.cutClip();
+  } else if (mod && key === "v") {
+    e.preventDefault();
+    const lane = s.clips.find((c) => c.id === sel)?.lane ?? null;
+    s.paste(lane, clock.t);
   } else if (mod) {
     return;
   } else if ((e.key === "Delete" || e.key === "Backspace") && sel) {
@@ -178,6 +188,14 @@ function handleKey(e: KeyboardEvent) {
   } else if (key === "s") s.split();
   else if (key === "r") void s.toggleRecord();
   else if (key === "l") s.set({ loop: !s.loop });
+  else if (key === "m" && sel) {
+    const c = s.clips.find((x) => x.id === sel);
+    if (c) {
+      s.commit();
+      s.updateClip(sel, { muted: !c.muted }, false);
+      s.restartIfPlaying();
+    }
+  }
   else if (e.key === "?") s.set({ shortcuts: !s.shortcuts });
   else if (e.key === "=" || e.key === "+") s.zoomBy(1.5);
   else if (e.key === "-") s.zoomBy(1 / 1.5);

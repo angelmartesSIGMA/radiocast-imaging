@@ -32,10 +32,15 @@ export interface Ghost {
   /** Track type a new lane would get when `lane` is NEW_LANE. */
   type?: TrackType;
 }
+export type MenuKind = "clip" | "lane" | "area" | "ruler" | "sound";
 export interface ContextMenu {
-  clipId: string;
+  kind: MenuKind;
+  /** Clip, lane or sound id (unused for the ruler). */
+  id: string;
   x: number;
   y: number;
+  /** Timeline position under the pointer, when relevant. */
+  at?: number;
 }
 
 export interface Toast {
@@ -112,6 +117,8 @@ export interface StudioState {
   fileMark: { lane: string; at: number } | null;
   libHover: boolean;
   menu: ContextMenu | null;
+  /** Copied clip (its position is kept relative for paste). */
+  clipboard: Clip | null;
   renaming: string | null;
 
   // overlays
@@ -178,7 +185,16 @@ interface Actions {
   zoomFit(): void;
 
   importFiles(files: File[], target: { lane: string; at: number } | "library" | null): Promise<void>;
-  toggleRecord(): Promise<void>;
+  toggleRecord(lane?: string): Promise<void>;
+  copyClip(id?: string | null): void;
+  cutClip(id?: string | null): void;
+  paste(lane?: string | null, at?: number): void;
+  splitAt(id: string, t: number): void;
+  trimToPlayhead(id: string, edge: "start" | "end"): void;
+  normalizeClip(id: string): void;
+  duplicateLane(id: string): void;
+  clearLane(id: string): void;
+  removeSound(id: string): void;
   exportWav(): Promise<void>;
 }
 
@@ -259,6 +275,7 @@ export const useStudio = create<Studio>()(
       fileMark: null,
       libHover: false,
       menu: null,
+      clipboard: null,
       renaming: null,
 
       toast: null,
@@ -735,7 +752,121 @@ export const useStudio = create<Studio>()(
         }
       },
 
-      async toggleRecord() {
+      copyClip(id) {
+        const s = get();
+        const c = s.clips.find((x) => x.id === (id ?? s.selected));
+        if (!c) return;
+        const name = s.sounds.find((x) => x.id === c.soundId)?.name ?? "clip";
+        set({ clipboard: { ...c }, menu: null });
+        s.toastMsg(`Copied “${name}”`);
+      },
+      cutClip(id) {
+        const s = get();
+        const c = s.clips.find((x) => x.id === (id ?? s.selected));
+        if (!c) return;
+        set({ clipboard: { ...c } });
+        s.commit();
+        set((st) => ({ clips: st.clips.filter((x) => x.id !== c.id), selected: null, menu: null }));
+        get().restartIfPlaying();
+        s.toastMsg("Cut — paste with ⌘V", COLORS.violet, undoAction());
+      },
+      paste(lane, at) {
+        const s = get();
+        const cb = s.clipboard;
+        if (!cb) {
+          s.toastMsg("Nothing copied yet");
+          return;
+        }
+        if (!s.sounds.some((x) => x.id === cb.soundId)) return;
+        const target = s.lanes.find((l) => l.id === lane) ?? s.lanes.find((l) => l.id === cb.lane) ?? s.lanes[0];
+        s.commit();
+        const n: Clip = { ...cb, id: uid("c"), lane: target.id, start: Math.max(0, at ?? clock.t) };
+        set((st) => ({ clips: [...st.clips, n], selected: n.id, menu: null }));
+        get().placeClip(n.id);
+        get().restartIfPlaying();
+      },
+      splitAt(id, t) {
+        const s = get();
+        const c = s.clips.find((x) => x.id === id);
+        if (!c || t <= c.start + 0.02 || t >= c.start + c.len - 0.02) {
+          s.toastMsg("Pick a point inside the clip to split it");
+          return;
+        }
+        s.commit();
+        const a = t - c.start;
+        const right: Clip = { ...c, id: uid("c"), start: t, offset: c.offset + a, len: c.len - a, fadeIn: 0, fadeOut: Math.min(c.fadeOut, c.len - a) };
+        set((st) => ({
+          clips: st.clips.flatMap((x) => (x.id === id ? [{ ...x, len: a, fadeOut: 0, fadeIn: Math.min(x.fadeIn, a) }, right] : [x])),
+          menu: null,
+        }));
+        get().restartIfPlaying();
+        s.toastMsg(`Split at ${fmt(t)}`, COLORS.violet, undoAction());
+      },
+      trimToPlayhead(id, edge) {
+        const s = get();
+        const c = s.clips.find((x) => x.id === id);
+        const t = clock.t;
+        if (!c || t <= c.start + 0.02 || t >= c.start + c.len - 0.02) {
+          s.toastMsg("Put the playhead inside the clip first");
+          return;
+        }
+        s.commit();
+        const a = t - c.start;
+        const patch: Partial<Clip> =
+          edge === "start"
+            ? { start: t, offset: c.offset + a, len: c.len - a, fadeIn: Math.min(c.fadeIn, c.len - a) }
+            : { len: a, fadeOut: Math.min(c.fadeOut, a) };
+        s.updateClip(id, patch, false);
+        set({ menu: null });
+        get().restartIfPlaying();
+      },
+      normalizeClip(id) {
+        const s = get();
+        const c = s.clips.find((x) => x.id === id);
+        if (!c) return;
+        const peak = getEngine().clipPeak(c.soundId, !!c.reverse, c.offset, c.len);
+        if (!peak) return;
+        const gain = Math.round(clamp(-1 - 20 * Math.log10(peak), -24, 12) * 2) / 2;
+        s.commit();
+        s.updateClip(id, { gain }, false);
+        set({ menu: null });
+        get().restartIfPlaying();
+        s.toastMsg(`Normalised to −1 dB peak (${gain > 0 ? "+" : ""}${gain.toFixed(1)} dB)`, COLORS.violet, undoAction());
+      },
+      duplicateLane(id) {
+        const s = get();
+        const l = s.lanes.find((x) => x.id === id);
+        if (!l) return;
+        s.commit();
+        const copy = s.createLane(l.type, l.id);
+        s.setLane(copy.id, { fx: l.fx, gain: l.gain, mute: l.mute, label: `${l.label} copy` }, false);
+        const clips = get().clips.filter((c) => c.lane === id).map((c) => ({ ...c, id: uid("c"), lane: copy.id }));
+        set((st) => ({ clips: [...st.clips, ...clips], menu: null }));
+        get().restartIfPlaying();
+      },
+      clearLane(id) {
+        const s = get();
+        const l = s.lanes.find((x) => x.id === id);
+        if (!l || !s.clips.some((c) => c.lane === id)) return;
+        s.commit();
+        set((st) => ({ clips: st.clips.filter((c) => c.lane !== id), menu: null, selected: null }));
+        get().restartIfPlaying();
+        s.toastMsg(`Cleared “${l.label}”`, COLORS.red, undoAction());
+      },
+      removeSound(id) {
+        const s = get();
+        const snd = s.sounds.find((x) => x.id === id);
+        if (!snd?.user) return;
+        const used = s.clips.filter((c) => c.soundId === id).length;
+        s.commit();
+        set((st) => ({ sounds: st.sounds.filter((x) => x.id !== id), clips: st.clips.filter((c) => c.soundId !== id), menu: null }));
+        void audioStore.remove(id);
+        get().restartIfPlaying();
+        // Undo restores the clips but not the audio file, so say so plainly.
+        s.toastMsg(used ? `Deleted “${snd.name}” and ${used} clip${used > 1 ? "s" : ""}` : `Deleted “${snd.name}”`, COLORS.red);
+      },
+
+      async toggleRecord(laneArg) {
         const s = get();
         if (s.recording) {
           recorder?.stop();
@@ -754,7 +885,8 @@ export const useStudio = create<Studio>()(
         }
         const selC = s.clips.find((c) => c.id === s.selected);
         const selL = selC && s.lanes.find((l) => l.id === selC.lane);
-        const lane = selL?.type === "voice" ? selL.id : s.lanes.find((l) => l.type === "voice")?.id;
+        const argL = laneArg ? s.lanes.find((l) => l.id === laneArg) : undefined;
+        const lane = argL?.id ?? (selL?.type === "voice" ? selL.id : s.lanes.find((l) => l.type === "voice")?.id);
         if (!lane) {
           s.toastMsg("Add a voice track to record onto", COLORS.red);
           return;

@@ -1,0 +1,105 @@
+.menu {
+  position: fixed;
+  z-index: 120;
+  min-width: 220px;
+  max-width: 300px;
+  max-height: calc(100vh - 16px);
+  overflow-y: auto;
+  padding: 5px;
+  border-radius: 12px;
+  border: 1px solid var(--line-2);
+  background: rgba(26, 26, 31, 0.97);
+  backdrop-filter: blur(12px);
+  box-shadow: var(--shadow-pop);
+  transform-origin: top left;
+  animation: menuIn 0.1s ease-out;
+  user-select: none;
+}
+.title {
+  margin: 4px 9px 6px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--fg-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.heading {
+  margin: 4px 9px;
+  font-size: 11px;
+  color: var(--fg-3);
+}
+.sep {
+  display: block;
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--line);
+}
+.menu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 30px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  padding: 0 8px 0 6px;
+  font-size: 13px;
+  color: var(--fg);
+  text-align: left;
+  cursor: pointer;
+  outline: none;
+}
+.menu button:hover:not(:disabled),
+.menu button:focus-visible,
+.menu button[data-open] {
+  background: rgba(255, 255, 255, 0.08);
+}
+.menu button:disabled {
+  color: var(--fg-4);
+  cursor: default;
+}
+.menu button:disabled .lead,
+.menu button:disabled .kbd {
+  opacity: 0.5;
+}
+.menu button[data-danger]:not(:disabled) {
+  color: var(--red);
+}
+.menu button[data-danger]:not(:disabled):hover {
+  background: var(--red-soft);
+}
+.lead {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  flex-shrink: 0;
+  color: var(--fg-2);
+}
+.menu button[data-danger] .lead {
+  color: inherit;
+}
+.menu button[aria-checked="true"] .lead {
+  color: var(--accent);
+}
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+}
+.label {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.kbd {
+  margin-left: 12px;
+  font-size: 11.5px;
+  color: var(--fg-3);
+}
+.menu button > svg:last-child {
+  color: var(--fg-3);
+}

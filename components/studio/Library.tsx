@@ -197,6 +197,10 @@ function SoundRow({ s, previewing, dragging }: { s: Sound; previewing: boolean; 
       data-dragging={dragging || undefined}
       data-previewing={previewing || undefined}
       onPointerDown={onPointerDown}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        useStudio.getState().set({ menu: { kind: "sound", id: s.id, x: e.clientX, y: e.clientY } });
+      }}
       onDoubleClick={(e) => {
         if (!(e.target as HTMLElement).closest("button")) useStudio.getState().addClip(s.id);
       }}

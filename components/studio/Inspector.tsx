@@ -112,7 +112,7 @@ function ClipPanel() {
           valueLabel={fmtDb(sel.gain)}
           value={sel.gain}
           min={-24}
-          max={6}
+          max={12}
           step={0.5}
           onCommit={s.commit}
           onChange={(v) => s.updateClip(sel.id, { gain: v })}

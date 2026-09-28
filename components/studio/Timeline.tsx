@@ -210,7 +210,13 @@ export function Timeline() {
             <div className={css.rulerCorner}>Tracks</div>
             <div
               className={css.ruler}
-              onPointerDown={onRulerDown}
+              onPointerDown={(e) => e.button === 0 && onRulerDown(e)}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                const r = e.currentTarget.getBoundingClientRect();
+                const at = Math.max(0, (e.clientX - r.left) / pps);
+                s.set({ menu: { kind: "ruler", id: "", x: e.clientX, y: e.clientY, at } });
+              }}
               style={{ width: trackW, backgroundSize: `${minor * pps}px 7px` }}
               aria-label="Timeline ruler — click or drag to move the playhead"
             >
@@ -340,7 +346,13 @@ const LaneRow = memo(function LaneRow({
       data-muted={!audible || undefined}
       data-compact={compact || undefined}
     >
-      <div className={css.laneHead}>
+      <div
+        className={css.laneHead}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          st().set({ menu: { kind: "lane", id: lane.id, x: e.clientX, y: e.clientY } });
+        }}
+      >
         <div
           className={css.resize}
           onPointerDown={startResize}
@@ -468,6 +480,13 @@ const LaneRow = memo(function LaneRow({
           const at = st().snapTime((e.clientX - r.left) / pps, 0, null).t;
           window.dispatchEvent(new Event("studio:filedrop-reset"));
           void st().importFiles(Array.from(e.dataTransfer.files), { lane: lane.id, at });
+        }}
+        onContextMenu={(e) => {
+          if ((e.target as HTMLElement).closest("[data-clip]")) return;
+          e.preventDefault();
+          const r = e.currentTarget.getBoundingClientRect();
+          const at = st().snapTime((e.clientX - r.left) / pps, 0, null).t;
+          st().set({ selected: null, menu: { kind: "area", id: lane.id, x: e.clientX, y: e.clientY, at } });
         }}
         onDoubleClick={(e) => {
           if ((e.target as HTMLElement).closest("[data-clip]")) return;
@@ -655,12 +674,17 @@ function ClipView({
       className={css.clip}
       data-selected={selected || undefined}
       data-active={active || undefined}
+      data-muted={c.muted || undefined}
       onPointerDown={onPointerDown}
       onPointerEnter={() => setHover(true)}
       onPointerLeave={() => setHover(false)}
       onContextMenu={(e) => {
         e.preventDefault();
-        useStudio.getState().set({ selected: c.id, menu: { clipId: c.id, x: e.clientX, y: e.clientY } });
+        e.stopPropagation();
+        const tr = (e.currentTarget.parentElement as HTMLElement).getBoundingClientRect();
+        useStudio
+          .getState()
+          .set({ selected: c.id, menu: { kind: "clip", id: c.id, x: e.clientX, y: e.clientY, at: (e.clientX - tr.left) / pps } });
       }}
       onDoubleClick={() => useStudio.getState().set({ inspOpen: true })}
       role="button"
@@ -674,6 +698,11 @@ function ClipView({
     >
       {w >= 40 && (
         <div className={css.clipHead}>
+          {c.muted && (
+            <span className={css.revBadge} aria-label="Muted">
+              MUTE
+            </span>
+          )}
           {c.reverse && (
             <span className={css.revBadge} aria-label="Reversed">
               REV

@@ -91,6 +91,29 @@ It's a port of `design/imaging-studio-v2.reference.html` with these additions:
 - Tracks keep their colour for life, so inserting a track never reshuffles colours.
 - The timeline auto-scrolls when you drag near its edges.
 
+### Right-click menus
+
+Menus support submenus and full keyboard use (↑ ↓ to move, → to open a submenu, ← to go back, Enter to run, Esc to close).
+
+- **Clips:**
+  - Cut, Copy, Paste after, Duplicate
+  - Split here, Split at playhead, Trim start/end to playhead
+  - Reverse, Mute clip (M), Normalise to −1 dB
+  - Gain ▸ (+3, −3, −6, reset)
+  - Fades ▸ (de-click, fade in/out presets, fade to end of target, remove)
+  - Move to track ▸ (any track, or a new one)
+  - Play from clip start, Move playhead here, Open in inspector, Delete
+- **Track headers:**
+  - Rename, Mute, Solo, Processing ▸, Reset volume
+  - Record on this track (voice tracks)
+  - Add track below ▸, Duplicate track (with its clips), Move up/down
+  - Clear clips, Delete track
+- **Empty track space:** Paste here, Add sound here…, Record here (voice tracks), Play from here, Move playhead here, the track's own menu, Add track below ▸.
+- **Ruler:** Play from here, Move playhead here, Split all clips here, Target length ▸, Loop, Grid ▸ (time or bars & beats, snap), zoom.
+- **Library sounds:** Preview, Add at playhead, Add to track ▸ (any track, or a new one), and Delete from library for your own uploads.
+
+⌘C / ⌘X / ⌘V copy, cut and paste clips; pasting goes to the playhead on the selected clip's track.
+
 ### Interaction and usability pass
 
 - **Command palette (⌘K).** Search and run any action, add any sound at the playhead, start a template or set a target length.

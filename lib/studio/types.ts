@@ -29,6 +29,8 @@ export interface Clip {
   fadeOut: number;
   /** Play the source backwards (reverse swells, reverse reverbs). */
   reverse?: boolean;
+  /** Silenced without deleting. */
+  muted?: boolean;
 }
 
 export interface Lane {
