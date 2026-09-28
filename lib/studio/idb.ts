@@ -1,6 +1,6 @@
 import type { TrackType } from "./types";
 
-/** Uploaded and recorded audio, kept in IndexedDB so a reload doesn’t lose it. */
+/** Local cache of stored audio (uploads, takes, samples) so reloads don't re-download it. */
 export interface StoredAudio {
   id: string;
   name: string;
@@ -34,5 +34,6 @@ async function run<T>(mode: IDBTransactionMode, fn: (s: IDBObjectStore) => IDBRe
 export const audioStore = {
   put: (a: StoredAudio) => run("readwrite", (s) => s.put(a)).catch(() => undefined),
   all: () => run<StoredAudio[]>("readonly", (s) => s.getAll()).catch(() => [] as StoredAudio[]),
+  get: (id: string) => run<StoredAudio | undefined>("readonly", (s) => s.get(id)).catch(() => undefined),
   remove: (id: string) => run("readwrite", (s) => s.delete(id)).catch(() => undefined),
 };

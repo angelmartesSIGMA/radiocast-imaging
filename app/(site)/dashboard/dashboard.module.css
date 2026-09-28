@@ -1,0 +1,159 @@
+.session {
+  position: relative;
+  padding: 16px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  transition: border-color 0.15s, transform 0.15s;
+}
+.session:hover {
+  border-color: var(--line-3);
+  transform: translateY(-1px);
+}
+.session[data-pending] {
+  opacity: 0.6;
+}
+.sessionLink {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+.sessionTop {
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+}
+.sessionIcon {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.more {
+  position: relative;
+  z-index: 1;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  font-size: 16px;
+  color: var(--fg-3);
+  cursor: pointer;
+}
+.more:hover {
+  background: var(--hover);
+  color: var(--fg);
+}
+.menu {
+  position: absolute;
+  top: 32px;
+  right: 0;
+  z-index: 5;
+  min-width: 150px;
+  padding: 5px;
+  border-radius: 10px;
+  border: 1px solid var(--line-2);
+  background: var(--raised);
+  box-shadow: var(--shadow-pop);
+}
+.menu button {
+  display: block;
+  width: 100%;
+  height: 30px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  padding: 0 10px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--fg);
+  text-align: left;
+  cursor: pointer;
+}
+.menu button:hover {
+  background: var(--active);
+}
+.menu button[data-danger] {
+  color: var(--red);
+}
+.sessionName {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rename {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 26px;
+  border-radius: 6px;
+  border: 1px solid var(--line-3);
+  background: var(--bg);
+  padding: 0 6px;
+  margin-left: -7px;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--fg);
+  outline: none;
+}
+.sessionMeta {
+  margin: 4px 0 0;
+  font-size: 12.5px;
+  color: var(--fg-2);
+  font-variant-numeric: tabular-nums;
+}
+.sessionMeta[data-over] {
+  color: var(--red);
+}
+.sessionUpdated {
+  margin: 10px 0 0;
+  font-size: 11.5px;
+  color: var(--fg-3);
+}
+.newWrap {
+  position: relative;
+}
+.newMenu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 10;
+  width: 280px;
+  padding: 5px;
+  border-radius: 12px;
+  border: 1px solid var(--line-2);
+  background: var(--raised);
+  box-shadow: var(--shadow-pop);
+}
+.newMenu a {
+  display: block;
+  padding: 8px 10px;
+  border-radius: 8px;
+  color: var(--fg);
+}
+.newMenu a:hover {
+  background: var(--active);
+  color: var(--fg);
+}
+.newName {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+}
+.newBlurb {
+  display: block;
+  margin-top: 1px;
+  font-size: 12px;
+  color: var(--fg-3);
+}

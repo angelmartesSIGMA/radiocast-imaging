@@ -302,3 +302,39 @@
   color: var(--fg);
   cursor: pointer;
 }
+
+.progress {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 24px 0;
+  font-size: 12.5px;
+  color: var(--fg-2);
+}
+.progress[data-error] {
+  color: var(--red);
+}
+.progressBar {
+  position: relative;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+.progressBar span {
+  position: absolute;
+  inset: 0;
+  background: var(--accent);
+  transform-origin: left;
+  transition: transform 0.2s;
+}
+.doneActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+.doneActions a {
+  display: inline-flex;
+  align-items: center;
+}

@@ -1,6 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
+import { encodeWav } from "@/lib/audio/dsp";
+import { api, putSigned } from "@/lib/studio/remote";
 import { DELIVERABLES, TURNAROUNDS, VOICES } from "@/lib/studio/constants";
 import { fmtShort } from "@/lib/studio/format";
 import { useStudio } from "@/lib/studio/store";
@@ -15,7 +18,54 @@ const WPS = 2.7;
 export function SendDrawer() {
   const s = useStudio();
   const [touched, setTouched] = useState(false);
+  const [sending, setSending] = useState<{ step: string; p: number } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [ref, setRef] = useState<string | null>(null);
   if (!s.drawer) return null;
+
+  const send = async () => {
+    setError(null);
+    try {
+      setSending({ step: "Saving your session…", p: 0.05 });
+      await s.save();
+      const hasMix = s.clips.length > 0;
+      setSending({ step: "Creating your brief…", p: 0.1 });
+      const brief = await api<{ id: string; ref: string; uploadUrl: string | null }>("/api/briefs", {
+        method: "POST",
+        json: {
+          sessionId: s.sessionId,
+          station: s.station,
+          email: s.email.trim(),
+          voice: s.voice,
+          deliverables: s.deliverables,
+          turnaround: s.turnaround,
+          script: s.notes,
+          target: s.target,
+          hasMix,
+          snapshot: {
+            name: s.projectName,
+            duration_s: +s.sessionEnd().toFixed(2),
+            clip_count: s.clips.length,
+            lanes: s.lanes.map((l) => ({ label: l.label, type: l.type, fx: l.fx })),
+          },
+        },
+      });
+      if (hasMix && brief.uploadUrl) {
+        setSending({ step: "Rendering the mix…", p: 0.2 });
+        const r = await s.renderMaster();
+        if (r) {
+          await putSigned(brief.uploadUrl, encodeWav(r.buf), "audio/wav", (p) => setSending({ step: "Uploading the mix…", p: 0.3 + p * 0.65 }));
+          await api(`/api/briefs/${brief.id}/mix-done`, { method: "POST" });
+        }
+      }
+      setRef(brief.ref);
+      s.set({ sent: true });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn’t send the brief");
+    } finally {
+      setSending(null);
+    }
+  };
 
   const close = () => s.set({ drawer: false });
   const end = s.sessionEnd();
@@ -48,7 +98,7 @@ export function SendDrawer() {
             <div className={css.doneIcon}>
               <Icon name="check" size={22} />
             </div>
-            <p className={css.doneTitle}>Brief sent</p>
+            <p className={css.doneTitle}>Brief sent{ref ? ` · ${ref}` : ""}</p>
             <p className={css.doneSub}>
               A producer will reply to <b>{s.email}</b> with drafts
               {s.turnaround === "rush" ? " within 24 hours" : " within 3 business days"}.
@@ -69,9 +119,14 @@ export function SendDrawer() {
                 </li>
               )}
             </ul>
-            <button type="button" className={css.secondary} onClick={close}>
-              Back to the studio
-            </button>
+            <div className={css.doneActions}>
+              <button type="button" className={css.secondary} onClick={close}>
+                Back to the studio
+              </button>
+              <Link href="/dashboard" className={css.secondary}>
+                Track it on your dashboard
+              </Link>
+            </div>
           </div>
         ) : (
           <form
@@ -79,7 +134,7 @@ export function SendDrawer() {
             onSubmit={(e) => {
               e.preventDefault();
               setTouched(true);
-              if (canSend) s.set({ sent: true });
+              if (canSend && !sending) void send();
             }}
           >
             <div className={css.body}>
@@ -176,10 +231,25 @@ export function SendDrawer() {
               </label>
             </div>
 
+            {(sending || error) && (
+              <div className={css.progress} data-error={error ? true : undefined} role="status">
+                <span>{error ?? sending?.step}</span>
+                {sending && (
+                  <span className={css.progressBar}>
+                    <span style={{ transform: `scaleX(${sending.p})` }} />
+                  </span>
+                )}
+              </div>
+            )}
             <div className={css.foot}>
               <a href="mailto:contact@radiocast.net">contact@radiocast.net</a>
-              <button type="submit" className={css.primary} aria-disabled={!canSend} data-disabled={!canSend || undefined}>
-                Send brief
+              <button
+                type="submit"
+                className={css.primary}
+                aria-disabled={!canSend || !!sending}
+                data-disabled={!canSend || !!sending || undefined}
+              >
+                {sending ? "Sending…" : error ? "Try again" : "Send brief"}
               </button>
             </div>
           </form>

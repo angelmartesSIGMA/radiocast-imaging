@@ -56,6 +56,11 @@ body {
   font-size: 13px;
   letter-spacing: -0.005em;
   -webkit-font-smoothing: antialiased;
+}
+
+/* The studio is a full-screen app; the rest of the site scrolls normally. */
+html:has([data-studio]),
+html:has([data-studio]) body {
   overflow: hidden;
 }
 

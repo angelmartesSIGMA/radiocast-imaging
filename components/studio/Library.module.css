@@ -321,3 +321,10 @@
   text-underline-offset: 2px;
   text-decoration-color: var(--fg-4);
 }
+.kind[data-status="uploading"],
+.kind[data-status="loading"] {
+  color: var(--amber);
+}
+.kind[data-status="error"] {
+  color: var(--red);
+}

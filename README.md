@@ -1,10 +1,52 @@
-# Radiocast Imaging Studio
+# Radiocast Imaging
 
-A browser-based studio for building radio imaging (station IDs, sweepers, liners) and sending the session to Radiocast producers. This is a UI prototype: all audio is synthesized or decoded in the browser with Web Audio, and "Send brief" doesn't submit anywhere yet.
+A website for building radio imaging (station IDs, sweepers, liners) in the browser and sending it to Radiocast producers:
 
-Built with Next.js (App Router), TypeScript, and Zustand. Deploys to Vercel with no configuration.
+- **`/`** is the landing page, with templates and featured samples.
+- **`/samples`** is the public sample library: search, filter, preview, and "Use" (which starts a session with that sample).
+- **`/dashboard`** lists your sessions, the briefs you've sent (with status and producer deliveries to download), and your uploads.
+- **`/studio`** starts a new session. **`/studio/[id]`** is the studio itself, and every change is saved to the database automatically.
+- **`/admin`** is the producer side:
+  - overview
+  - the brief queue, with status changes, history, internal notes and delivery uploads
+  - the sample library, with upload, edit, publish and feature
+  - sessions
 
-## Run it
+It uses Next.js (App Router), TypeScript and Zustand, with **self-hosted Supabase** for Postgres and Storage. It deploys to Vercel.
+
+There are no user accounts yet. Every table has a nullable `owner_id` column so a separate auth system can be added later.
+
+## Setup
+
+### 1. Database and buckets
+
+Open the SQL editor of your self-hosted Supabase (Studio → SQL editor) and run [`supabase/migrations/0001_init.sql`](supabase/migrations/0001_init.sql). It is safe to run more than once. It creates:
+
+- **Tables:** `sessions`, `assets`, `samples`, `briefs`, `brief_events` and `brief_files`, all with RLS on and no policies. Only the service role can read or write them.
+- **Private buckets:**
+  - `user-audio` and `samples` (100 MB per file)
+  - `briefs` (250 MB per file)
+
+On the Supabase side (the stack's own `.env`, not Vercel):
+- Set Storage's `FILE_SIZE_LIMIT` to at least `104857600` (100 MB) or larger. Bucket limits can't exceed it.
+- Kong must serve `/storage/v1` publicly over **HTTPS**. Browsers upload and download audio directly through signed URLs on that host.
+
+### 2. Environment variables
+
+Set these in **Vercel → Project → Settings → Environment Variables** for Production and Preview, and in `.env.local` for local work (see `.env.example`):
+
+| Variable | Example | Notes |
+| --- | --- | --- |
+| `SUPABASE_URL` | `https://supabase.example.com` | Public Kong URL of your stack |
+| `SUPABASE_SERVICE_ROLE_KEY` | `eyJ…` | `SERVICE_ROLE_KEY` from the Supabase `.env`. **Server only.** Never prefix it with `NEXT_PUBLIC_` |
+| `BASIC_AUTH_USER` | `radiocast` | Site-wide testing gate |
+| `BASIC_AUTH_PASSWORD` | long random | |
+| `ADMIN_PASSWORD` | long random | Password for `/admin/login` |
+| `ADMIN_SESSION_SECRET` | 32+ random chars | Signs the admin cookie (for example `openssl rand -hex 32`) |
+
+If either Basic Auth variable is missing, a deployed build returns `503` instead of going public. `npm run dev` stays open without them. If Supabase isn't configured, the studio and dashboard show a setup notice instead of crashing.
+
+### 3. Run it
 
 ```bash
 npm install
@@ -13,30 +55,41 @@ npm run typecheck
 npm run build
 ```
 
-## Deploy
+## How it fits together
 
-Import the repo in Vercel; it detects Next.js automatically.
+- **The browser never holds a Supabase key.** All database access goes through route handlers and server actions, using the service role (`lib/supabase/server.ts`, `import "server-only"`).
+- **Audio goes straight to Storage.** The server hands out a signed upload URL, and the browser uploads the file to it with a progress bar, which avoids Vercel's request-size limit. A finalize call then marks the row as uploaded. Downloads use signed URLs that last 1 hour. The studio caches decoded audio in IndexedDB, so reopening a session doesn't download everything again.
+- **Sound ids:**
+  - built-in synth sounds keep their names (`pulse`, `riser`, …)
+  - uploads and takes are `a_<uuid>` (table `assets`, bucket `user-audio`)
+  - library samples are `s_<uuid>` (table `samples`, bucket `samples`)
+- **Autosave:** changes to clips, tracks, mix or target are debounced for 800 ms, then `PATCH`ed to `/api/sessions/[id]`. The header badge shows *Saving… / Saved / Not saved · Retry*.
+- **Send brief:**
+  1. Saves the session.
+  2. Creates the `briefs` row, which returns a short ref like `F30758`.
+  3. Renders the mix at the export loudness and uploads it to `briefs/<id>/mix.wav`.
 
-### Password protection (Basic Auth)
-
-The whole site sits behind HTTP Basic Auth (`proxy.ts`). Set these in **Vercel → Project → Settings → Environment Variables** for Production and Preview, then redeploy:
-
-| Variable | Example |
-| --- | --- |
-| `BASIC_AUTH_USER` | `radiocast` |
-| `BASIC_AUTH_PASSWORD` | a long random password |
-
-If either variable is missing, a deployed build returns `503` instead of going public. `npm run dev` stays open without them. To test auth locally, copy `.env.example` to `.env.local`.
+  Producers work through the brief in `/admin/briefs`. Deliveries are uploaded to `briefs/<id>/deliveries/` and appear on the dashboard as downloads.
+- **Admin gate:**
+  - `proxy.ts` runs Basic Auth on everything except build assets and images.
+  - `/admin/**` and `/api/admin/**` also need the `rc_admin` cookie: an HMAC-signed expiry that lasts 7 days, set by `/admin/login`.
+- **Older sessions:** a session saved in the browser before the database existed can be imported from the dashboard.
 
 ## Layout
 
 ```
-app/                    layout, fonts, global tokens
+app/(site)/             landing, /samples, /dashboard (site nav + footer)
+app/studio/             /studio (creates a session) and /studio/[id]
+app/admin/              login + panel: overview, briefs, samples, sessions
+app/api/                sessions, assets, samples, briefs, admin/* (JSON, service role)
 components/studio/      Header (transport), Library, Toolbar, Timeline, Inspector, SendDrawer, Overlays
+components/site/        site shell, sample browser, status chips
 components/ui/          Icon set and shared controls (buttons, chips, sliders, switches)
-lib/audio/              engine (Web Audio scheduling, meters, offline render), synth generators, DSP helpers
-lib/studio/             store (state + actions + undo history), clock (60fps playhead), templates, IndexedDB audio store
-design/                 the original design file this prototype was built from
+lib/audio/              engine (Web Audio scheduling, meters, offline render), synth generators, DSP, loudness
+lib/studio/             store (state + actions + undo history), clock, templates, API client, IndexedDB cache
+lib/db/, lib/supabase/  row types, validation, signed media URLs, server client
+supabase/migrations/    SQL to run on the Supabase instance
+design/                 the original design file
 ```
 
 The playhead runs outside React state (`lib/studio/clock.ts`), so playback doesn't re-render the timeline every frame.
@@ -120,7 +173,6 @@ Menus support submenus and full keyboard use (↑ ↓ to move, → to open a sub
 - **Double-click an empty spot on a track** to search for a sound and drop it right there.
 - **Templates.** Station ID :20 / :10, Sweeper :05, Liner :15 and Blank, from the header's New menu or from the empty-session cards. Starting one can be undone.
 - **Undo right in the toast** after deleting a clip, removing a track, splitting or starting a template.
-- **Autosave.** The session (clips, tracks, mix) is kept in localStorage, and uploads and recorded takes are kept in IndexedDB, so a reload restores everything. A header badge shows the save status.
 - **Record count-in.** 3-2-1 beeps with a big countdown. Press R or Esc to cancel, and switch it off in the inspector.
 - **Tooltips everywhere** that show the matching keyboard shortcut.
 - **Timeline feedback.** A hover line with a time readout, clips that light up while they play, and a progress bar on library previews.

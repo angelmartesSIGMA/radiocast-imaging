@@ -479,6 +479,9 @@ function soundItems(id: string): Entry[] {
         { label: `New ${TRACK_TYPES[snd.type].label} track`, icon: "plus", run: () => s.addClip(id, "__new__") },
       ],
     },
+    ...(snd.status === "error" && snd.source === "asset"
+      ? ([{ label: "Retry upload", icon: "upload", run: () => s.retryUpload(id) }] as Entry[])
+      : []),
     ...(snd.user
       ? (["sep", { label: "Delete from library", icon: "trash", danger: true, run: () => s.removeSound(id) }] as Entry[])
       : []),

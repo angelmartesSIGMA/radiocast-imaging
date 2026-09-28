@@ -23,6 +23,6 @@ const Studio = dynamic(() => import("./Studio"), {
   ),
 });
 
-export default function StudioLoader() {
-  return <Studio />;
+export default function StudioLoader({ sessionId }: { sessionId: string }) {
+  return <Studio sessionId={sessionId} />;
 }

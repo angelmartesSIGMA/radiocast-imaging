@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect } from "react";
 import { getEngine } from "@/lib/audio/engine";
 import { clock, dom } from "@/lib/studio/clock";
@@ -17,7 +18,12 @@ import css from "./Studio.module.css";
 
 const hasFiles = (e: DragEvent) => Array.from(e.dataTransfer?.types ?? []).includes("Files");
 
-export default function Studio() {
+/** Fields that make up the saved session; any change to them schedules an autosave. */
+const SAVED_KEYS = ["clips", "lanes", "projectName", "master", "duck", "duckDb", "limiter", "target", "bpm", "gridMode", "loudTarget"] as const;
+
+export default function Studio({ sessionId }: { sessionId: string }) {
+  const ready = useStudio((s) => s.ready);
+  const loadError = useStudio((s) => s.loadError);
   const libOpen = useStudio((s) => s.libOpen);
   const inspOpen = useStudio((s) => s.inspOpen);
   const vw = useStudio((s) => s.vw);
@@ -26,7 +32,27 @@ export default function Studio() {
 
   useEffect(() => {
     const st = useStudio.getState;
-    void st().init();
+    void st().init(sessionId);
+
+    // Autosave: debounce edits, then PATCH the session row.
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const unsubSave = useStudio.subscribe((a, b) => {
+      if (!a.sessionId || !a.ready || a.loadError) return;
+      if (!SAVED_KEYS.some((k) => a[k] !== b[k])) return;
+      // Live drags update clips every frame; save once the gesture settles.
+      clearTimeout(timer);
+      if (a.saveState !== "saving") useStudio.setState({ saveState: "idle" });
+      timer = setTimeout(() => void st().save(), 800);
+    });
+    const onUnload = (e: BeforeUnloadEvent) => {
+      const s = st();
+      if (timer || s.saveState === "saving" || s.sounds.some((x) => x.status === "uploading")) {
+        clearTimeout(timer);
+        void s.save();
+        if (s.sounds.some((x) => x.status === "uploading")) e.preventDefault();
+      }
+    };
+    window.addEventListener("beforeunload", onUnload);
 
     // transport clock
     let raf = 0;
@@ -89,12 +115,36 @@ export default function Studio() {
       window.removeEventListener("resize", onResize);
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("studio:filedrop-reset", reset);
+      window.removeEventListener("beforeunload", onUnload);
+      unsubSave();
+      clearTimeout(timer);
       getEngine().stop();
     };
-  }, []);
+  }, [sessionId]);
+
+  if (loadError) {
+    return (
+      <div className={css.state} data-studio>
+        <p className={css.stateTitle}>Couldn’t open this session</p>
+        <p className={css.stateSub}>{loadError}</p>
+        <div className={css.stateActions}>
+          <Link href="/dashboard">Back to dashboard</Link>
+          <button type="button" onClick={() => location.reload()}>
+            Try again
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className={css.shell}>
+    <div className={css.shell} data-studio>
+      {!ready && (
+        <div className={css.loading} role="status">
+          <span className={css.spinner} />
+          Loading session…
+        </div>
+      )}
       <Header />
       <div className={css.body}>
         {libOpen && (

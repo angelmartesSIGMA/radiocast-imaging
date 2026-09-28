@@ -8,6 +8,10 @@ import { applyGain, limit, measureLufs, peakOf } from "@/lib/audio/loudness";
 import { clock, dom } from "./clock";
 import { laneColor } from "./colors";
 import { audioStore } from "./idb";
+import { LEGACY_KEY } from "./legacy";
+import { ApiError, fetchAudio, samplesApi, sessionApi, uploadAsset } from "./remote";
+import { ASSET_PREFIX, SAMPLE_PREFIX, type SessionData } from "@/lib/db/types";
+import type { MediaItem } from "@/lib/db/media";
 import { defaultLanes, LANE_IDS, TEMPLATES } from "./templates";
 import { COLORS, HEADER_W, SCALES, TRACK_TYPES, VOICES } from "./constants";
 import { clamp, dbToGain, fmt } from "./format";
@@ -69,8 +73,10 @@ export interface StudioState {
   target: number | null;
   past: Snapshot[];
   future: Snapshot[];
-  /** True once a session exists in storage (so reloads restore it instead of the demo). */
-  hasSession: boolean;
+  /** Cloud session this studio edits (null until loaded). */
+  sessionId: string | null;
+  saveState: "idle" | "saving" | "saved" | "error";
+  loadError: string | null;
 
   // transport
   ready: boolean;
@@ -138,7 +144,12 @@ export interface StudioState {
 }
 
 interface Actions {
-  init(): Promise<void>;
+  init(sessionId: string): Promise<void>;
+  save(): Promise<void>;
+  sessionData(): SessionData;
+  ensureBuffer(soundId: string): Promise<boolean>;
+  retryUpload(soundId: string): void;
+  renderMaster(): Promise<{ buf: AudioBuffer; lufs: number; peakDb: number } | null>;
   set: (patch: Partial<StudioState>) => void;
   toastMsg(msg: string, color?: string, action?: Toast["action"]): void;
   newSession(templateId: string): void;
@@ -217,6 +228,63 @@ function bumpIds(ids: string[]) {
   takes = Math.max(takes, ids.filter((i) => i.startsWith("u")).length);
 }
 
+
+let hydrated = false;
+let saveSeq = 0;
+/** Signed download URLs for stored sounds (assets and samples). */
+const remoteUrls = new Map<string, string>();
+const loading = new Map<string, Promise<boolean>>();
+const pendingUploads = new Map<string, { blob: Blob; fileName: string }>();
+
+function mediaSound(m: MediaItem, source: "asset" | "sample"): Sound {
+  return {
+    id: m.id,
+    name: m.name,
+    kind: m.kind,
+    type: m.type,
+    dur: m.duration || 1,
+    path: m.waveform || "M0 20 L100 20 Z",
+    user: source === "asset",
+    source,
+    category: m.category ?? null,
+  };
+}
+
+async function runUpload(soundId: string, blob: Blob, fileName: string) {
+  const st = useStudio.getState();
+  const snd = st.sounds.find((x) => x.id === soundId);
+  if (!snd) return;
+  const mark = (status: Sound["status"]) =>
+    useStudio.setState((s) => ({ sounds: s.sounds.map((x) => (x.id === soundId ? { ...x, status } : x)) }));
+  pendingUploads.set(soundId, { blob, fileName });
+  mark("uploading");
+  try {
+    await uploadAsset(
+      {
+        id: soundId.slice(ASSET_PREFIX.length),
+        sessionId: st.sessionId,
+        name: snd.name,
+        kind: snd.kind,
+        type: snd.type,
+        duration: snd.dur,
+        waveform: snd.path,
+      },
+      blob,
+      fileName,
+    );
+    pendingUploads.delete(soundId);
+    mark(undefined);
+  } catch (e) {
+    mark("error");
+    useStudio
+      .getState()
+      .toastMsg(`“${snd.name}” didn’t upload (${e instanceof Error ? e.message : "error"}) — it plays, but won’t be saved`, COLORS.red, {
+        label: "Retry",
+        run: () => useStudio.getState().retryUpload(soundId),
+      });
+  }
+}
+
 const undoAction = () => ({ label: "Undo", run: () => useStudio.getState().undo() });
 
 const initialW = typeof window === "undefined" ? 1440 : window.innerWidth;
@@ -235,7 +303,9 @@ export const useStudio = create<Studio>()(
       target: 20,
       past: [],
       future: [],
-      hasSession: false,
+      sessionId: null,
+      saveState: "idle",
+      loadError: null,
 
       ready: false,
       playing: false,
@@ -294,54 +364,154 @@ export const useStudio = create<Studio>()(
       // ───────────────────────────── basics
       set: (patch) => set(patch),
 
-      async init() {
+      async init(sessionId) {
         if (initing) return;
         initing = true;
+        hydrated = false;
         const engine = getEngine();
         const sounds = engine.buildLibrary();
-        const st = get();
-        bumpIds([...st.clips.map((c) => c.id), ...st.lanes.map((l) => l.id)]);
-        if (!st.hasSession) {
-          const t = TEMPLATES[0];
-          set({ sounds, ready: true, hasSession: true, clips: buildClips(t.id), lanes: defaultLanes(t.laneFx), target: t.target, projectName: t.title });
-        } else set({ sounds, ready: true });
-
-        // Restore uploads and takes from IndexedDB.
-        const rows = await audioStore.all();
-        const restored: Sound[] = [];
-        for (const r of rows) {
-          try {
-            const buf = await engine.decode(await r.blob.arrayBuffer());
-            engine.buffers.set(r.id, buf);
-            restored.push({ id: r.id, name: r.name, kind: r.kind, type: r.type, dur: buf.duration, path: wavePath(buf.getChannelData(0)), user: true });
-          } catch {
-            void audioStore.remove(r.id);
+        set({ sounds, sessionId, ready: false, loadError: null, saveState: "idle", past: [], future: [] });
+        try {
+          const [{ session, media }, sampleList] = await Promise.all([
+            sessionApi.get(sessionId),
+            samplesApi.list().catch(() => ({ samples: [] as MediaItem[] })),
+          ]);
+          const d = session.data as Partial<SessionData> & { pendingTemplate?: string; pendingSample?: string | null };
+          // Stored audio appears in the library straight away; its audio streams in behind it.
+          const remote = [...media.map((m) => mediaSound(m, "asset")), ...sampleList.samples.map((m) => mediaSound(m, "sample"))];
+          for (const m of [...media, ...sampleList.samples]) if (m.url) remoteUrls.set(m.id, m.url);
+          takes = media.filter((m) => m.kind === "Mic").length;
+          let clips = d.clips;
+          let lanes = d.lanes;
+          let target = d.target !== undefined ? d.target : session.target_s;
+          let fresh = false;
+          if (!clips || !lanes) {
+            const t = TEMPLATES.find((x) => x.id === d.pendingTemplate) ?? TEMPLATES[0];
+            clips = buildClips(t.id);
+            lanes = defaultLanes(t.laneFx);
+            target = t.target;
+            fresh = true;
           }
+          bumpIds([...clips.map((c) => c.id), ...lanes.map((l) => l.id)]);
+          const known = new Set([...sounds, ...remote].map((x) => x.id));
+          const missing = clips.filter((c) => !known.has(c.soundId)).length;
+          set({
+            sounds: [...sounds, ...remote],
+            projectName: session.name,
+            clips: clips.filter((c) => known.has(c.soundId)),
+            lanes,
+            target: target ?? null,
+            master: d.master ?? 0,
+            duck: d.duck ?? true,
+            duckDb: d.duckDb ?? -12,
+            limiter: d.limiter ?? true,
+            bpm: d.bpm ?? 120,
+            gridMode: d.gridMode ?? "time",
+            loudTarget: d.loudTarget !== undefined ? d.loudTarget : -14,
+            ready: true,
+          });
+          for (const c of get().clips) get().placeClip(c.id, true);
+          if (fresh && d.pendingSample) get().addClip(SAMPLE_PREFIX + d.pendingSample, null, 0, { noCommit: true, quiet: true });
+          set({ past: [], future: [], selected: null });
+          hydrated = true;
+          if (missing) get().toastMsg(`${missing} clip${missing > 1 ? "s" : ""} used audio that no longer exists and ${missing > 1 ? "were" : "was"} removed`, COLORS.amber);
+          if (fresh || missing) void get().save();
+          else set({ saveState: "saved" });
+          // Download the stored audio this session actually uses.
+          const used = new Set(get().clips.map((c) => c.soundId));
+          await Promise.all([...used].filter((id) => remoteUrls.has(id)).map((id) => get().ensureBuffer(id)));
+          get().restartIfPlaying();
+        } catch (e) {
+          initing = false;
+          set({ ready: true, loadError: e instanceof ApiError && e.status === 404 ? "This session doesn’t exist or was deleted." : e instanceof Error ? e.message : "Couldn’t load the session" });
         }
-        bumpIds(restored.map((x) => x.id));
-        const known = new Set([...sounds, ...restored].map((x) => x.id));
-        set((cur) => ({ sounds: [...cur.sounds, ...restored], clips: cur.clips.filter((c) => known.has(c.soundId)) }));
-        // Older sessions could stack clips on one track; spread any overlaps onto their own tracks.
-        for (const c of get().clips) get().placeClip(c.id, true);
+      },
+
+      sessionData() {
+        const s = get();
+        return {
+          version: 1,
+          clips: s.clips,
+          lanes: s.lanes,
+          master: s.master,
+          duck: s.duck,
+          duckDb: s.duckDb,
+          limiter: s.limiter,
+          target: s.target,
+          bpm: s.bpm,
+          gridMode: s.gridMode,
+          loudTarget: s.loudTarget,
+        };
+      },
+
+      async save() {
+        const s = get();
+        if (!s.sessionId || !hydrated) return;
+        const seq = ++saveSeq;
+        set({ saveState: "saving" });
+        try {
+          await sessionApi.save(s.sessionId, {
+            name: s.projectName,
+            data: s.sessionData(),
+            duration_s: +s.sessionEnd().toFixed(3),
+            target_s: s.target,
+            clip_count: s.clips.length,
+          });
+          if (seq === saveSeq) set({ saveState: "saved" });
+        } catch {
+          if (seq === saveSeq) set({ saveState: "error" });
+        }
+      },
+
+      async ensureBuffer(soundId) {
+        const engine = getEngine();
+        if (engine.buffers.has(soundId)) return true;
+        const url = remoteUrls.get(soundId);
+        if (!url) return false;
+        let job = loading.get(soundId);
+        if (!job) {
+          job = (async () => {
+            const mark = (status: Sound["status"], extra: Partial<Sound> = {}) =>
+              set((st) => ({ sounds: st.sounds.map((x) => (x.id === soundId ? { ...x, status, ...extra } : x)) }));
+            mark("loading");
+            try {
+              const cached = await audioStore.get(soundId);
+              const blob = cached?.blob ?? (await fetchAudio(url));
+              const buf = await engine.decode(await blob.arrayBuffer());
+              engine.buffers.set(soundId, buf);
+              if (!cached) {
+                const snd = get().sounds.find((x) => x.id === soundId);
+                if (snd) void audioStore.put({ id: soundId, name: snd.name, kind: snd.kind, type: snd.type, blob });
+              }
+              mark(undefined, { dur: buf.duration });
+              return true;
+            } catch {
+              mark("error");
+              loading.delete(soundId);
+              return false;
+            }
+          })();
+          loading.set(soundId, job);
+        }
+        return job;
+      },
+
+      retryUpload(soundId) {
+        const p = pendingUploads.get(soundId);
+        if (p) void runUpload(soundId, p.blob, p.fileName);
       },
 
       newSession(templateId) {
         const t = TEMPLATES.find((x) => x.id === templateId);
         if (!t) return;
-        const s = get();
-        if (s.playing) s.stop();
-        s.commit();
-        clock.set(0);
-        set({ clips: buildClips(t.id), lanes: defaultLanes(t.laneFx), target: t.target, projectName: t.title, selected: null, palette: null });
-        const prev = { projectName: s.projectName, target: s.target };
-        get().toastMsg(`Started “${t.name}”`, COLORS.violet, {
-          label: "Undo",
-          run: () => {
-            get().undo();
-            set(prev);
-          },
-        });
-        requestAnimationFrame(() => get().zoomFit());
+        set({ palette: null });
+        get().toastMsg(`Creating “${t.name}”…`);
+        sessionApi
+          .create({ template: t.id })
+          .then(({ id }) => {
+            window.location.href = `/studio/${id}`;
+          })
+          .catch((e: Error) => get().toastMsg(`Couldn’t create a session: ${e.message}`, COLORS.red));
       },
 
       toastMsg(msg, color = COLORS.violet, action) {
@@ -464,8 +634,15 @@ export const useStudio = create<Studio>()(
           return;
         }
         if (s.playing) s.stop();
-        engine.preview(id, () => set({ previewId: null }));
         set({ previewId: id });
+        void s.ensureBuffer(id).then((ok) => {
+          if (get().previewId !== id) return;
+          if (!ok && !engine.buffers.has(id)) {
+            set({ previewId: null });
+            return;
+          }
+          engine.preview(id, () => set({ previewId: null }));
+        });
       },
       stopPreview() {
         getEngine().stopPreview();
@@ -520,6 +697,7 @@ export const useStudio = create<Studio>()(
         set({ clips: [...get().clips, c], selected: c.id });
         get().placeClip(c.id, opts?.quiet);
         get().restartIfPlaying();
+        if (!getEngine().buffers.has(soundId)) void get().ensureBuffer(soundId).then((ok) => ok && get().restartIfPlaying());
         return c.id;
       },
 
@@ -743,7 +921,7 @@ export const useStudio = create<Studio>()(
                   : laneObj
                     ? laneObj.id
                     : get().lanes.find((l) => l.type === type)?.id ?? null;
-            const placed = addUserSound(buf, f, f.name.replace(/\.[^.]+$/, ""), "Upload", type, lane, at);
+            const placed = addUserSound(buf, f, f.name.replace(/\.[^.]+$/, ""), "Upload", type, lane, at, f.name);
             if (targetLane === NEW_LANE && placed) targetLane = placed;
             at += buf.duration;
           } catch {
@@ -861,6 +1039,7 @@ export const useStudio = create<Studio>()(
         s.commit();
         set((st) => ({ sounds: st.sounds.filter((x) => x.id !== id), clips: st.clips.filter((c) => c.soundId !== id), menu: null }));
         void audioStore.remove(id);
+        if (id.startsWith(ASSET_PREFIX)) void fetch(`/api/assets/${id.slice(ASSET_PREFIX.length)}`, { method: "DELETE" });
         get().restartIfPlaying();
         // Undo restores the clips but not the audio file, so say so plainly.
         s.toastMsg(used ? `Deleted “${snd.name}” and ${used} clip${used > 1 ? "s" : ""}` : `Deleted “${snd.name}”`, COLORS.red);
@@ -937,34 +1116,43 @@ export const useStudio = create<Studio>()(
         }
       },
 
-      async exportWav() {
+      async renderMaster() {
         const s = get();
         const end = s.sessionEnd();
-        if (!end) {
+        if (!end) return null;
+        await Promise.all([...new Set(s.clips.map((c) => c.soundId))].map((id) => s.ensureBuffer(id)));
+        const buf = await getEngine().render(get().mix(), end);
+        const ceiling = dbToGain(-1);
+        // Loudness normalise (optional), then a look-ahead limiter to a −1 dBFS ceiling.
+        if (s.loudTarget != null) {
+          const before = await measureLufs(buf);
+          if (Number.isFinite(before)) applyGain(buf, dbToGain(s.loudTarget - before));
+        }
+        if (s.limiter || s.loudTarget != null) limit(buf, ceiling);
+        let lufs = await measureLufs(buf);
+        // Limiting can pull loudness under target; one corrective pass gets it back.
+        if (s.loudTarget != null && Number.isFinite(lufs) && Math.abs(lufs - s.loudTarget) > 0.2) {
+          applyGain(buf, dbToGain(s.loudTarget - lufs));
+          limit(buf, ceiling);
+          lufs = await measureLufs(buf);
+        }
+        const peakDb = 20 * Math.log10(peakOf(buf) || 1e-6);
+        set({ loudness: { lufs, peakDb, at: Date.now(), source: "export" } });
+        return { buf, lufs, peakDb };
+      },
+
+      async exportWav() {
+        const s = get();
+        if (!s.sessionEnd()) {
           s.toastMsg("Nothing to export yet");
           return;
         }
         if (s.exporting) return;
         set({ exporting: true });
         try {
-          const buf = await getEngine().render(s.mix(), end);
-          const ceiling = dbToGain(-1);
-          // Loudness normalise (optional), then a look-ahead limiter to a −1 dBFS ceiling.
-          if (s.loudTarget != null) {
-            const before = await measureLufs(buf);
-            if (Number.isFinite(before)) applyGain(buf, dbToGain(s.loudTarget - before));
-          }
-          if (s.limiter || s.loudTarget != null) limit(buf, ceiling);
-          let lufs = await measureLufs(buf);
-          // Limiting can pull loudness under target; one corrective pass gets it back.
-          if (s.loudTarget != null && Number.isFinite(lufs) && Math.abs(lufs - s.loudTarget) > 0.2) {
-            applyGain(buf, dbToGain(s.loudTarget - lufs));
-            limit(buf, ceiling);
-            lufs = await measureLufs(buf);
-          }
-          const peakDb = 20 * Math.log10(peakOf(buf) || 1e-6);
-          set({ loudness: { lufs, peakDb, at: Date.now(), source: "export" } });
-
+          const r = await s.renderMaster();
+          if (!r) return;
+          const { buf, lufs, peakDb } = r;
           const a = document.createElement("a");
           a.href = URL.createObjectURL(encodeWav(buf));
           a.download = `${(s.projectName || "imaging").replace(/[^\w\- ]+/g, "").replace(/\s+/g, " ").trim() || "imaging"}.wav`;
@@ -975,8 +1163,9 @@ export const useStudio = create<Studio>()(
           else get().toastMsg(`Exported WAV · ${loud}peak ${peakDb.toFixed(1)} dBFS`, COLORS.green);
         } catch {
           get().toastMsg("Export failed", COLORS.red);
+        } finally {
+          set({ exporting: false });
         }
-        set({ exporting: false });
       },
 
       async measureLoudness() {
@@ -997,26 +1186,28 @@ export const useStudio = create<Studio>()(
     }),
     {
       name: "radiocast-imaging",
-      version: 2,
-      // v1 only stored preferences; they carry over as-is.
-      migrate: (persisted) => persisted as never,
-      // Audio lives in IndexedDB (see idb.ts); everything else is small enough for localStorage.
+      version: 3,
+      // v2 kept the whole session in localStorage. Sessions now live in Supabase, so stash any
+      // old one for the dashboard's one-time "import" and keep only preferences.
+      migrate: (persisted, version) => {
+        const p = (persisted ?? {}) as Record<string, unknown>;
+        if (version < 3 && Array.isArray(p.clips) && p.clips.length) {
+          try {
+            localStorage.setItem(
+              LEGACY_KEY,
+              JSON.stringify({ name: p.projectName, clips: p.clips, lanes: p.lanes, target: p.target, master: p.master, bpm: p.bpm }),
+            );
+          } catch {
+            /* storage full or blocked */
+          }
+        }
+        return p as never;
+      },
+      // Session content lives in Supabase; only per-browser preferences stay here.
       partialize: (s) => ({
-        hasSession: s.hasSession,
-        clips: s.clips,
-        lanes: s.lanes,
         countInOn: s.countInOn,
-        projectName: s.projectName,
-        master: s.master,
-        duck: s.duck,
-        duckDb: s.duckDb,
-        limiter: s.limiter,
-        target: s.target,
         snapOn: s.snapOn,
         laneH: s.laneH,
-        bpm: s.bpm,
-        gridMode: s.gridMode,
-        loudTarget: s.loudTarget,
         station: s.station,
         email: s.email,
         voice: s.voice,
@@ -1050,12 +1241,14 @@ function buildClips(templateId: string): Clip[] {
   });
 }
 
-function addUserSound(buf: AudioBuffer, blob: Blob, name: string, kind: string, type: TrackType, lane: string | null, at: number) {
-  const id = uid("u");
+function addUserSound(buf: AudioBuffer, blob: Blob, name: string, kind: string, type: TrackType, lane: string | null, at: number, fileName?: string) {
+  const id = ASSET_PREFIX + crypto.randomUUID();
   getEngine().buffers.set(id, buf);
   void audioStore.put({ id, name, kind, type, blob });
-  const s: Sound = { id, name, kind, type, dur: buf.duration, path: wavePath(buf.getChannelData(0)), user: true };
+  const s: Sound = { id, name, kind, type, dur: buf.duration, path: wavePath(buf.getChannelData(0)), user: true, source: "asset", status: "uploading" };
   useStudio.setState((st) => ({ sounds: [...st.sounds, s] }));
+  const ext = (blob.type.split("/")[1] || "wav").split(";")[0].replace("mpeg", "mp3").replace("x-wav", "wav");
+  void runUpload(id, blob, fileName ?? `${name}.${ext}`);
   const st = useStudio.getState();
   if (lane) {
     const clipId = st.addClip(id, lane, at, { quiet: true });

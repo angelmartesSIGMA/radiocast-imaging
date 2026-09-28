@@ -40,14 +40,23 @@ export function Library({ floating }: { floating: boolean }) {
   const libHover = useStudio((s) => s.libHover);
   const set = useStudio((s) => s.set);
 
-  const filters = sounds.some((s) => s.user) ? [...FILTERS, ["yours", "Your audio"] as [LibraryFilter, string]] : FILTERS;
+  const filters: [LibraryFilter, string][] = [
+    ...FILTERS,
+    ...(sounds.some((s) => s.source === "sample") ? [["samples", "Library"] as [LibraryFilter, string]] : []),
+    ...(sounds.some((s) => s.user) ? [["yours", "Yours"] as [LibraryFilter, string]] : []),
+  ];
   const q = search.trim().toLowerCase();
   const list = useMemo(
     () =>
       sounds
         .filter((s) => {
-          const g = s.user ? "yours" : GROUPS[s.kind];
-          return (filter === "all" || filter === g) && (!q || s.name.toLowerCase().includes(q) || s.kind.toLowerCase().includes(q));
+          const match =
+            filter === "all" ||
+            (filter === "yours" && s.user) ||
+            (filter === "samples" && s.source === "sample") ||
+            (!s.user && GROUPS[s.kind] === filter);
+          const text = `${s.name} ${s.kind} ${s.category ?? ""}`.toLowerCase();
+          return match && (!q || text.includes(q));
         })
         .sort((a, b) => Number(b.user) - Number(a.user)),
     [sounds, filter, q],
@@ -214,8 +223,16 @@ function SoundRow({ s, previewing, dragging }: { s: Sound; previewing: boolean; 
       </span>
       <span className={css.meta}>
         <span className={css.name}>{s.name}</span>
-        <span className={css.kind}>
-          {s.kind} · {s.dur < 60 ? `${s.dur.toFixed(1)}s` : fmtShort(s.dur)}
+        <span className={css.kind} data-status={s.status}>
+          {s.status === "uploading"
+            ? "Uploading…"
+            : s.status === "loading"
+              ? "Downloading…"
+              : s.status === "error"
+                ? s.source === "asset"
+                  ? "Not saved — right-click to retry"
+                  : "Couldn’t load"
+                : `${s.source === "sample" ? "Library · " : ""}${s.kind} · ${s.dur < 60 ? `${s.dur.toFixed(1)}s` : fmtShort(s.dur)}`}
         </span>
       </span>
       <button

@@ -11,6 +11,11 @@ export interface Sound {
   /** SVG path (viewBox 0 0 100 40) of the waveform envelope. */
   path: string;
   user: boolean;
+  /** Where the audio lives when it isn't synthesised in the browser. */
+  source?: "asset" | "sample";
+  /** Upload/download progress for stored audio. */
+  status?: "uploading" | "loading" | "error";
+  category?: string | null;
 }
 
 export interface Clip {
@@ -56,6 +61,6 @@ export interface MixSnapshot {
   limiter: boolean;
 }
 
-export type LibraryFilter = "all" | "beds" | "fx" | "stingers" | "yours";
+export type LibraryFilter = "all" | "beds" | "fx" | "stingers" | "samples" | "yours";
 
 export type ClipHandle = "move" | "trimL" | "trimR" | "fadeIn" | "fadeOut";

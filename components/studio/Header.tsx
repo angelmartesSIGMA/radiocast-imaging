@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { TEMPLATES } from "@/lib/studio/templates";
 import { getEngine } from "@/lib/audio/engine";
@@ -19,15 +20,9 @@ export function Header() {
   return (
     <header className={css.header}>
       <div className={css.left}>
-        <Image
-          className={css.logo}
-          src="/radiocast-logo.png"
-          alt="Radiocast"
-          width={28}
-          height={28}
-          draggable={false}
-          priority
-        />
+        <Link href="/dashboard" className={css.logoLink} data-tip="Back to dashboard">
+          <Image className={css.logo} src="/radiocast-logo.png" alt="Radiocast — dashboard" width={28} height={28} draggable={false} priority />
+        </Link>
         <div className={css.session}>
           <div className={css.titleRow}>
             <input
@@ -276,33 +271,30 @@ function NewMenu() {
               <span className={css.newBlurb}>{t.blurb}</span>
             </button>
           ))}
-          <p className={css.newFoot}>Your current session can be restored with Undo.</p>
+          <p className={css.newFoot}>Opens as a new session — this one stays saved on your dashboard.</p>
         </div>
       )}
     </div>
   );
 }
 
-/** Brief “Saving…” flash after edits, then a steady “Saved”. */
+/** Cloud save status for the session. */
 function SavedBadge() {
-  const [saving, setSaving] = useState(false);
-  useEffect(() => {
-    let t: ReturnType<typeof setTimeout> | undefined;
-    const unsub = useStudio.subscribe((a, b) => {
-      if (a.clips === b.clips && a.lanes === b.lanes && a.projectName === b.projectName) return;
-      setSaving(true);
-      clearTimeout(t);
-      t = setTimeout(() => setSaving(false), 700);
-    });
-    return () => {
-      unsub();
-      clearTimeout(t);
-    };
-  }, []);
+  const state = useStudio((s) => s.saveState);
+  const uploading = useStudio((s) => s.sounds.filter((x) => x.status === "uploading").length);
+  const save = useStudio((s) => s.save);
+  if (state === "error")
+    return (
+      <button type="button" className={css.saved} data-state="error" onClick={() => void save()} data-tip="Your last changes aren’t saved yet">
+        <span className={css.savedDot} />
+        Not saved · Retry
+      </button>
+    );
+  const label = uploading ? `Uploading ${uploading} file${uploading > 1 ? "s" : ""}…` : state === "saving" ? "Saving…" : state === "idle" ? "Unsaved changes" : "Saved";
   return (
-    <span className={css.saved} data-saving={saving || undefined} data-tip="Your session and uploads are saved in this browser">
+    <span className={css.saved} data-state={uploading ? "saving" : state} data-tip="Sessions save to the cloud automatically">
       <span className={css.savedDot} />
-      {saving ? "Saving…" : "Saved"}
+      {label}
     </span>
   );
 }
