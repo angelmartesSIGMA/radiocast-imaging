@@ -1,5 +1,5 @@
 import "server-only";
-import { BUCKETS, db, jwtRole, supabaseUrl } from "./server";
+import { BUCKETS, db, keyProblem, serviceKey, supabaseUrl } from "./server";
 
 export interface Check {
   label: string;
@@ -17,7 +17,7 @@ export function explain(err: unknown): string {
   const cause = e?.cause?.code ?? e?.cause?.message ?? "";
   if (/fetch failed|ENOTFOUND|ECONNREFUSED|ETIMEDOUT|certificate|UND_ERR/i.test(msg + cause))
     return `Can’t reach SUPABASE_URL from the server (${cause || msg}). It must be the public HTTPS address of your Supabase gateway (Kong), with a valid certificate.`;
-  if (/Invalid API key|JWS|JWT|invalid signature|No API key/i.test(msg))
+  if (/Invalid API key|JWS|JWT|invalid signature|No API key|^Unauthorized$|HTTP 401/i.test(msg))
     return `Supabase rejected the key (${msg}). SUPABASE_SERVICE_ROLE_KEY must be the SERVICE_ROLE_KEY from the same Supabase stack.`;
   if (e?.code === "42P01" || e?.code === "PGRST205" || /does not exist|Could not find the table|schema cache/i.test(msg))
     return `Tables are missing (${msg}). Run supabase/migrations/0001_init.sql in the Supabase SQL editor.`;
@@ -35,7 +35,7 @@ export function explain(err: unknown): string {
 export async function checkSetup(): Promise<Check[]> {
   const out: Check[] = [];
   const url = supabaseUrl();
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() ?? "";
+  const key = serviceKey();
 
   out.push({ label: "SUPABASE_URL is set", ok: !!url, detail: url ? url : "Add it in Vercel → Settings → Environment Variables, then redeploy." });
   out.push({ label: "SUPABASE_SERVICE_ROLE_KEY is set", ok: !!key, detail: key ? undefined : "Add it in Vercel → Settings → Environment Variables, then redeploy." });
@@ -45,9 +45,9 @@ export async function checkSetup(): Promise<Check[]> {
     out.push({ label: "SUPABASE_URL is a full URL", ok: false, detail: "It must start with https://" });
     return out;
   }
-  const role = jwtRole(key);
-  if (role && role !== "service_role") {
-    out.push({ label: "Key is the service role key", ok: false, detail: `This key’s role is “${role}”. Use SERVICE_ROLE_KEY, not ANON_KEY.` });
+  const problem = keyProblem(key);
+  if (problem) {
+    out.push({ label: "Key is the service role key", ok: false, detail: problem });
     return out;
   }
   out.push({ label: "Key is the service role key", ok: true });
